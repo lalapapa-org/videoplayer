@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/GizmoVault/gotools/base/commerrx"
@@ -53,6 +54,32 @@ TryTop:
 					IsDir: true,
 				})
 			}
+
+			slices.SortFunc(fsItems, func(a, b VOFSItem) int {
+				// Function to determine prefix priority
+				getPrefixPriority := func(s string) int {
+					if strings.HasPrefix(s, "L-") {
+						return 1 // L- has highest priority
+					} else if strings.HasPrefix(s, "S-") {
+						return 2 // S- has medium priority
+					} else if strings.HasPrefix(s, "P-") {
+						return 3 // P- has lowest priority
+					}
+					return 4 // Handle unexpected cases
+				}
+
+				// Get priorities for both strings
+				priA := getPrefixPriority(a.Path)
+				priB := getPrefixPriority(b.Path)
+
+				// Compare by priority first
+				if priA != priB {
+					return priA - priB // Lower priority number comes first
+				}
+
+				// If prefixes are the same, compare strings lexicographically
+				return strings.Compare(a.Path, b.Path)
+			})
 		})
 
 		return
@@ -150,7 +177,10 @@ TryTop:
 	}
 
 	if playlistFlag != 1 {
-		if _, ok := rFs.(playlistx.PlaylistFS); !ok {
+		if f, ok := rFs.(playlistx.PlaylistFS); ok {
+			curDirname = "<span>" + curDirname + "</span><br />"
+			curDirname += "<span style=\"font-size: 12px; color: yellow\">" + f.GetFriendlyPath() + "</span>"
+		} else {
 			if videoNumbers >= 2 {
 				playlistFlag = 2
 			}

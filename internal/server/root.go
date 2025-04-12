@@ -22,6 +22,10 @@ var (
 	RootIDPrefixSMB      = "S-"
 	RootIDPrefixPlaylist = "P-"
 	RootIDPrefixHistory  = "H-"
+
+	RootNamePrefixLocalDir = "本地://"
+	RootNamePrefixSMB      = "SMB://"
+	RootNamePrefixPlaylist = "播放列表://"
 )
 
 type RootStat struct {
@@ -187,7 +191,7 @@ func (s *Server) addRoot(req *RootRequest) (id, name string, err error) {
 
 			n.RootStats = append(n.RootStats, RootStat{
 				ID:   id,
-				Name: "SMB://" + req.SMBUser + "@" + req.SMBAddress,
+				Name: s.fixRootName(id, req.SMBUser+"@"+req.SMBAddress),
 			})
 
 			n.SMBRoots[id] = SMBRoot{
@@ -210,7 +214,7 @@ func (s *Server) addRoot(req *RootRequest) (id, name string, err error) {
 
 			n.RootStats = append(n.RootStats, RootStat{
 				ID:   id,
-				Name: "本地:" + filepath.Base(req.LocalPath),
+				Name: s.fixRootName(id, filepath.Base(req.LocalPath)),
 			})
 
 			n.LocalRoots[id] = req.LocalPath
@@ -229,7 +233,7 @@ func (s *Server) addRoot(req *RootRequest) (id, name string, err error) {
 
 			n.RootStats = append(n.RootStats, RootStat{
 				ID:   id,
-				Name: "播放列表:" + filepath.Base(req.PlaylistPath),
+				Name: s.fixRootName(id, filepath.Base(req.PlaylistPath)),
 			})
 
 			n.PlayListRoots[id] = PlaylistRoot{
@@ -376,4 +380,76 @@ func (s *Server) handleRemoveRootInner(c *gin.Context) (err error) {
 	})
 
 	return
+}
+
+func (s *Server) handleRenameRoot(c *gin.Context) {
+	err := s.handleRenameRootInner(c)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+func (s *Server) handleRenameRootInner(c *gin.Context) (err error) {
+	var req RenameRootRequest
+
+	err = c.ShouldBindJSON(&req)
+	if err != nil {
+		return
+	}
+
+	if req.Root == "" || req.Name == "" {
+		err = commerrx.ErrInvalidArgument
+
+		return
+	}
+
+	err = s.roots.Change(func(o *TopRoots) (n *TopRoots, err error) {
+		n = o
+
+		for idx, stat := range n.RootStats {
+			if stat.ID == req.Root {
+				n.RootStats[idx].Name = s.fixRootName(req.Root, req.Name)
+
+				return
+			}
+		}
+
+		err = commerrx.ErrNotFound
+
+		return
+	})
+
+	return
+}
+
+func (s *Server) fixRootName(root, name string) string {
+	if strings.HasPrefix(root, RootIDPrefixLocalDir) {
+		if strings.HasPrefix(name, RootNamePrefixLocalDir) {
+			return name
+		}
+
+		return RootNamePrefixLocalDir + name
+	}
+
+	if strings.HasPrefix(root, RootIDPrefixSMB) {
+		if strings.HasPrefix(name, RootNamePrefixSMB) {
+			return name
+		}
+
+		return RootNamePrefixSMB + name
+	}
+
+	if strings.HasPrefix(root, RootIDPrefixPlaylist) {
+		if strings.HasPrefix(name, RootNamePrefixPlaylist) {
+			return name
+		}
+
+		return RootNamePrefixPlaylist + name
+	}
+
+	return name
 }

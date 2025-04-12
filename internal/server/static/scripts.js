@@ -126,6 +126,13 @@ async function fetchFileList(op, dir) {
             removeRoot.style.display = 'none';
         }
 
+        const renameRoot = document.getElementById('renameRoot')
+        if (canRemove) {
+            renameRoot.style.display = 'inline';
+        } else {
+            renameRoot.style.display = 'none';
+        }
+
 
         const playList = document.getElementById('playlistGen')
         if (playlistFlag === 0) {
@@ -338,6 +345,40 @@ async function addRoot(data) {
     } finally {
         hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
     }
+}
+
+async function reName(data) {
+    showLoading();
+    try {
+        const response = await fetch('/rename-root', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error('网络响应失败');
+        }
+
+        fetchFileList().then(()=>{});
+    } catch (error) {
+        console.error('重命名失败:', error);
+        Swal.fire('错误', '重命名失败，请稍后重试', 'error');
+    } finally {
+        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+    }
+}
+
+function showRenameRootDialog() {
+    closeRenameRootDialog();
+    document.getElementById('reName').value = '';
+    document.getElementById('renameRootDialog').style.display = 'block';
+}
+
+function closeRenameRootDialog() {
+    document.getElementById('renameRootDialog').style.display = 'none';
 }
 
 function showDirectoryDialog() {
@@ -603,6 +644,7 @@ async function onPlayFinish() {
     }
 }
 
+
 async function removeRoot() {
     showLoading();
     try {
@@ -646,6 +688,17 @@ async function removeRoot() {
     } finally {
         hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
     }
+}
+
+function confirmRenameRoot() {
+    const reNameText = document.getElementById('reName').value;
+
+    reName({
+        root: root,
+        name: reNameText,
+    }).then(()=>{
+        closeRenameRootDialog();
+    });
 }
 
 window.onload = function() {

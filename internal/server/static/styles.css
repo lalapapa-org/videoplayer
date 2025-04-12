@@ -118,7 +118,7 @@ button {
     padding-bottom: 10px;
 }
 
-#smbDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog {
+#smbDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog, #renameRootDialog {
     display: none;
     position: fixed;
     top: 50%;
@@ -136,6 +136,10 @@ button {
 }
 
 #directoryDialog {
+    width: 300px;
+}
+
+#renameRootDialog{
     width: 300px;
 }
 
@@ -171,36 +175,36 @@ button {
     margin-top: 20px;
 }
 
-#smbDialog h3, #directoryDialog h3 {
+#smbDialog h3, #directoryDialog h3, #renameRootDialog h3 {
     margin-top: 0;
     text-align: center;
     font-size: 18px;
     color: #333;
 }
 
-#smbDialog label, #directoryDialog label {
+#smbDialog label, #directoryDialog label, #renameRootDialog label {
     display: block;
     font-size: 14px;
     color: #555;
     margin-bottom: 8px;
 }
 
-#smbDialog input, #directoryDialog input {
+#smbDialog input, #directoryDialog input, #renameRootDialog input {
     width: 90%;
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 4px;
 }
 
-#smbDialog div, #directoryDialog div {
+#smbDialog div, #directoryDialog div, #renameRootDialog div {
     margin-bottom: 20px;
 }
 
-#smbDialog div[style*="text-align: center;"], #directoryDialog div[style*="text-align: center;"] {
+#smbDialog div[style*="text-align: center;"], #directoryDialog div[style*="text-align: center;"], #renameRootDialog div[style*="text-align: center;"] {
     text-align: center;
 }
 
-#smbDialog button, #directoryDialog button, #playlistDialog button {
+#smbDialog button, #directoryDialog button, #playlistDialog button, #renameRootDialog button {
     padding: 10px 20px;
     margin-right: 10px;
     border: none;
@@ -208,7 +212,7 @@ button {
     cursor: pointer;
 }
 
-#smbDialog button:nth-child(1), #directoryDialog button:nth-child(1) {
+#smbDialog button:nth-child(1), #directoryDialog button:nth-child(1), #renameRootDialog button:nth-child(1) {
     background: #007BFF;
     color: white;
 }
@@ -218,7 +222,7 @@ button {
     color: white;
 }
 
-#smbDialog button:nth-child(3), #directoryDialog button:nth-child(3), #playlistDialog button:nth-child(2) {
+#smbDialog button:nth-child(3), #directoryDialog button:nth-child(3), #playlistDialog button:nth-child(2), #renameRootDialog button:nth-child(2) {
     background: #DC3545;
     color: white;
 }

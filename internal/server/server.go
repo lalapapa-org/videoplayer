@@ -151,6 +151,7 @@ func (s *Server) httpRoutine() {
 	httpServer.POST("/test-root", s.handleTestRoot)
 	httpServer.POST("/add-root", s.handleAddRoot)
 	httpServer.POST("/remove-root", s.handleRemoveRoot)
+	httpServer.POST("/rename-root", s.handleRenameRoot)
 
 	httpServer.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", nil)

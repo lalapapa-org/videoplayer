@@ -16,6 +16,8 @@ type PlaylistFS interface {
 	SetCurIndex(idx int) error
 	GetCurIndex() int
 	NextIndex() int
+
+	GetFriendlyPath() string
 }
 
 func NewPlaylistXProvider(path string, items []string, rawFS i.FS) PlaylistFS {
@@ -57,6 +59,10 @@ func (impl *playlistXProvider) NextIndex() int {
 	}
 
 	return impl.curIndex
+}
+
+func (impl *playlistXProvider) GetFriendlyPath() string {
+	return impl.path
 }
 
 func (impl *playlistXProvider) GetCurIndex() int {

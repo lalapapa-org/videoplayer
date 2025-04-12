@@ -11,8 +11,9 @@ type BrowserResp struct {
 	PathName string     `json:"pathName"`
 	Items    []VOFSItem `json:"items"`
 
-	PlaylistFlag int    `json:"playlistFlag"` //  1: has playlist; 2: can gen playlist
-	PlaylistID   string `json:"playlistID"`
+	PlaylistFlag         int    `json:"playlistFlag"` //  1: has playlist; 2: can gen playlist
+	PlaylistID           string `json:"playlistID"`
+	PlaylistFriendlyPath string `json:"playlistFriendlyPath"`
 
 	CanRemove bool `json:"canRemove"`
 }
@@ -42,4 +43,9 @@ type RemoveRootRequest struct {
 type VideoTmRequest struct {
 	VideoID string `json:"vid"`
 	Tm      int    `json:"tm"`
+}
+
+type RenameRootRequest struct {
+	Root string `yaml:"root"`
+	Name string `yaml:"name"`
 }

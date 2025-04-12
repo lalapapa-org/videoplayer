@@ -19,7 +19,7 @@ var (
 
 func GetConfig() *Config {
 	_once.Do(func() {
-		_, err := configx.Load("video-be.yaml", &_config)
+		_, err := configx.Load("video-player.yaml", &_config)
 		if err != nil {
 			panic(err)
 		}

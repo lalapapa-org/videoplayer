@@ -17,8 +17,9 @@
         <button onclick="openSourceSelectionDialog()">选择来源</button>
         <button id="playlistGen" onclick="playlistGen()">生成播放列表</button>
         <button id="removeRoot" onclick="removeRoot()">移除存储</button>
+        <button id="renameRoot" onclick="showRenameRootDialog()">重命名存储</button>
     </div>
-    <span class="current-path bordered" id="root"></span>
+    <span class="current-path bordered" id="root" style="display: block !important;"></span>
     <span class="file-item" onclick="fetchFileList('leave')">..</span>
     <ul class="file-list" id="fileList">
     </ul>
@@ -51,6 +52,19 @@
 </div>
 
 <!-- 目录名称输入对话框 -->
+<div id="renameRootDialog">
+    <h3>重命名存储</h3>
+    <div>
+        <label>存储名称:</label>
+        <input type="text" id="reName">
+    </div>
+    <div>
+        <button onclick="confirmRenameRoot()">确定</button>
+        <button onclick="closeRenameRootDialog()">取消</button>
+    </div>
+</div>
+
+<!-- 目录名称输入对话框 -->
 <div id="directoryDialog">
     <h3>输入目录名称</h3>
     <div>
@@ -63,6 +77,7 @@
         <button onclick="closeDirectoryDialog()">取消</button>
     </div>
 </div>
+
 
 <div id="sourceSelectionDialog">
     <h3>添加视频目录</h3>

@@ -124,12 +124,24 @@ TryTop:
 	subDir := strings.Join(ps[1:], "/")
 	curDirname = s.getFSName(ps[0]) + "/" + subDir
 
+	playlistFs, _ := rFs.(playlistx.PlaylistFS)
+
 	fr, err := rFs.List(subDir)
 	if err != nil {
+		if playlistFs != nil {
+			err = nil
+			fsItems = append(fsItems, VOFSItem{
+				Name:  "-- -- 访问出错 -- --",
+				Path:  "",
+				Size:  "",
+				IsDir: false,
+			})
+
+			canRemove = true
+		}
+
 		return
 	}
-
-	playlistFs, _ := rFs.(playlistx.PlaylistFS)
 
 	canRemove = subDir == ""
 

@@ -1,12 +1,14 @@
 package smbx
 
 import (
+	"context"
 	"errors"
 	"io"
 	iofs "io/fs"
 	"net"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/hirochachacha/go-smb2"
 	"github.com/lalapapa-org/videoplayer/internal/i"
@@ -33,7 +35,10 @@ func TestSmbConnect(address, user, password string) (err error) {
 		},
 	}
 
-	session, err := d.Dial(conn)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	session, err := d.DialContext(ctx, conn)
 	if err != nil {
 		return
 	}
@@ -84,7 +89,7 @@ func (impl *smbXProvider) deActive() {
 }
 
 func (impl *smbXProvider) active() (err error) {
-	impl.conn, err = net.Dial("tcp", impl.address)
+	impl.conn, err = net.DialTimeout("tcp", impl.address, time.Second*20)
 	if err != nil {
 		return
 	}
@@ -96,7 +101,10 @@ func (impl *smbXProvider) active() (err error) {
 		},
 	}
 
-	impl.session, err = d.Dial(impl.conn)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	impl.session, err = d.DialContext(ctx, impl.conn)
 	if err != nil {
 		return
 	}
@@ -115,7 +123,10 @@ func (impl *smbXProvider) mustActive() (err error) {
 }
 
 func (impl *smbXProvider) listShares() (files []*i.FSEntry, err error) {
-	shares, err := impl.session.ListSharenames()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*30)
+	defer cancel()
+
+	shares, err := impl.session.WithContext(ctx).ListSharenames()
 	if err != nil {
 		impl.fixSMBError(err)
 

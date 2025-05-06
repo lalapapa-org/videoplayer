@@ -4,6 +4,7 @@ let playingVideo = ''
 let videoID = '';
 let playlistFlag = 0;
 let playlistID = '';
+let videoTm = null;
 
 function showLoading() {
     document.getElementById('loadingOverlay').style.display = 'flex';
@@ -58,18 +59,41 @@ async function setVideoSrc(videoURL) {
 
         const resp = await response.json();
         videoID = resp["video_id"];
-
         playingVideo = videoURL;
-
-        player.src({src: '/videos?file=' + videoID,type: 'video/webm'});
-
+        player.src({ src: '/videos?file=' + videoID, type: 'video/mp4' });
+        lastVideoTmReport = Math.floor(Date.now() / 1000);
         player.load();
-        player.currentTime(resp["last_tm"]);
-        player.play();
+        videoTm = !isNaN(resp["last_tm"]) && resp["last_tm"] >= 0 ? resp["last_tm"] : null;
+
+        const playPromise = player.play();
+        if (playPromise !== undefined) {
+            playPromise.catch(error => {
+                console.warn('Autoplay failed:', error);
+                Swal.fire({
+                    title: '提示',
+                    text: '请点击播放按钮开始视频',
+                    icon: 'info',
+                    confirmButtonText: '好的',
+                });
+                const playButton = document.createElement('button');
+                playButton.textContent = '播放';
+                playButton.onclick = () => {
+                    player.play().then(() => {
+                        if (videoTm !== null) {
+                            player.currentTime(videoTm);
+                            videoTm = null;
+                        }
+                    });
+                    playButton.remove();
+                };
+                document.getElementById('video-container').appendChild(playButton);
+            });
+        }
     } catch (error) {
+        console.error('Error in setVideoSrc:', error);
         Swal.fire('错误', '无法获取文件，请稍后重试', 'error');
     } finally {
-        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+        hideLoading();
     }
 }
 
@@ -167,9 +191,27 @@ function enterDir(filename) {
 }
 
 let player = videojs('#video');
-player.on('loadedmetadata', function() {
-    //player.currentTime(0);
-    //player.play();
+
+player.on('canplay', function() {
+    if (videoTm !== null && !isNaN(videoTm) && videoTm >= 0) {
+        console.log('Canplay fired, attempting seek to:', videoTm);
+        const trySeek = (attempt = 1) => {
+            const seekable = player.seekable();
+            if (seekable.length > 0 && videoTm >= seekable.start(0) && videoTm <= seekable.end(0)) {
+                console.log('Setting video time to:', videoTm);
+                player.currentTime(videoTm);
+                console.log('Current time after seek:', player.currentTime());
+                videoTm = null;
+            } else if (attempt <= 3) {
+                console.warn(`Seek attempt ${attempt} failed, retrying...`);
+                setTimeout(() => trySeek(attempt + 1), 200);
+            } else {
+                console.error('Failed to seek after retries, giving up');
+                videoTm = null;
+            }
+        };
+        trySeek();
+    }
 });
 
 //player.landscapeFullscreen();

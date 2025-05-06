@@ -128,7 +128,7 @@ TryTop:
 
 	fr, err := rFs.List(subDir)
 	if err != nil {
-		if playlistFs != nil {
+		if playlistFs != nil || !strings.Contains(req.Dir, "/") {
 			err = nil
 			fsItems = append(fsItems, VOFSItem{
 				Name:  "-- -- 访问出错 -- --",

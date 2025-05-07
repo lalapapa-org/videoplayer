@@ -1,10 +1,14 @@
 let root = '';
 let pathName = '';
-let playingVideo = ''
+let playingVideo = '';
 let videoID = '';
 let playlistFlag = 0;
 let playlistID = '';
 let videoTm = null;
+let currentFocus = null;
+
+const fileListContainer = document.getElementById('file-list-container');
+const videoContainer = document.getElementById('video-container');
 
 function showLoading() {
     document.getElementById('loadingOverlay').style.display = 'flex';
@@ -19,19 +23,17 @@ function getFileNameFromPath(path) {
     return parts[parts.length - 1];
 }
 
-// 创建文件项的HTML
 function createFileItem(file) {
     if (file.is_dir) {
         return `
-            <li class="file-item" onclick="enterDir('${file.path}')">
+            <li class="file-item" tabindex="0" onclick="enterDir('${file.path}')">
                 <span class="file-icon">📂</span>
                 <span class="file-name">${file.name}</span>
             </li>
         `;
     }
-
     return `
-        <li class="file-item" onclick="openFile('${file.path}')">
+        <li class="file-item" tabindex="0" onclick="openFile('${file.path}')">
             <span class="file-icon">📄</span>
             <span class="file-name">${file.name}</span>
             <span class="file-size">${file.size}</span>
@@ -50,7 +52,7 @@ async function setVideoSrc(videoURL) {
             },
             body: JSON.stringify({
                 video_url: videoURL,
-            })
+            }),
         });
 
         if (!response.ok) {
@@ -58,16 +60,23 @@ async function setVideoSrc(videoURL) {
         }
 
         const resp = await response.json();
-        videoID = resp["video_id"];
+        videoID = resp['video_id'];
         playingVideo = videoURL;
         player.src({ src: '/videos?file=' + videoID, type: 'video/mp4' });
         lastVideoTmReport = Math.floor(Date.now() / 1000);
         player.load();
-        videoTm = !isNaN(resp["last_tm"]) && resp["last_tm"] >= 0 ? resp["last_tm"] : null;
+        videoTm = !isNaN(resp['last_tm']) && resp['last_tm'] >= 0 ? resp['last_tm'] : null;
 
         const playPromise = player.play();
         if (playPromise !== undefined) {
-            playPromise.catch(error => {
+            playPromise.then(() => {
+                if (videoTm !== null) {
+                    player.currentTime(videoTm);
+                    videoTm = null;
+                }
+                // 移除 player.focus()
+            });
+            playPromise.catch((error) => {
                 console.warn('Autoplay failed:', error);
                 Swal.fire({
                     title: '提示',
@@ -77,6 +86,7 @@ async function setVideoSrc(videoURL) {
                 });
                 const playButton = document.createElement('button');
                 playButton.textContent = '播放';
+                playButton.tabIndex = 0;
                 playButton.onclick = () => {
                     player.play().then(() => {
                         if (videoTm !== null) {
@@ -86,7 +96,8 @@ async function setVideoSrc(videoURL) {
                     });
                     playButton.remove();
                 };
-                document.getElementById('video-container').appendChild(playButton);
+                videoContainer.appendChild(playButton);
+                initFocus(videoContainer);
             });
         }
     } catch (error) {
@@ -98,6 +109,10 @@ async function setVideoSrc(videoURL) {
 }
 
 async function saveVideoTm(tm) {
+    if (videoTm !== null) {
+        return;
+    }
+
     try {
         await fetch('/video/save-tm', {
             method: 'POST',
@@ -106,17 +121,16 @@ async function saveVideoTm(tm) {
             },
             body: JSON.stringify({
                 vid: videoID,
-                tm:  Math.floor(tm),
-            })
+                tm: Math.floor(tm),
+            }),
         });
     } catch (error) {
-        console.error('save video tm failed:',videoID, tm, error);
-    } finally {
+        console.error('save video tm failed:', videoID, tm, error);
     }
 }
 
 async function fetchFileList(op, dir) {
-    showLoading(); // 请求开始时显示遮罩
+    showLoading();
     try {
         const response = await fetch('/browser', {
             method: 'POST',
@@ -126,8 +140,8 @@ async function fetchFileList(op, dir) {
             body: JSON.stringify({
                 op: op,
                 path: root,
-                dir: dir
-            })
+                dir: dir,
+            }),
         });
 
         if (!response.ok) {
@@ -135,64 +149,76 @@ async function fetchFileList(op, dir) {
         }
 
         const resp = await response.json();
-        root = resp["path"];
-        pathName = resp["pathName"]
-        const files = resp["items"];
+        root = resp['path'];
+        pathName = resp['pathName'];
+        const files = resp['items'];
 
-        playlistFlag = resp["playlistFlag"]
-        playlistID = resp["playlistID"]
-        const canRemove = resp["canRemove"]
+        playlistFlag = resp['playlistFlag'];
+        playlistID = resp['playlistID'];
+        const canRemove = resp['canRemove'];
 
-        const removeRoot = document.getElementById('removeRoot')
-        if (canRemove) {
-            removeRoot.style.display = 'inline';
-        } else {
-            removeRoot.style.display = 'none';
-        }
+        const removeRoot = document.getElementById('removeRoot');
+        removeRoot.style.display = canRemove ? 'inline' : 'none';
 
-        const renameRoot = document.getElementById('renameRoot')
-        if (canRemove) {
-            renameRoot.style.display = 'inline';
-        } else {
-            renameRoot.style.display = 'none';
-        }
+        const renameRoot = document.getElementById('renameRoot');
+        renameRoot.style.display = canRemove ? 'inline' : 'none';
 
+        const playList = document.getElementById('playlistGen');
+        playList.style.display = playlistFlag === 0 ? 'none' : 'inline';
+        playList.textContent = playlistFlag === 1 ? '▶️' : '生成播放列表';
 
-        const playList = document.getElementById('playlistGen')
-        if (playlistFlag === 0) {
-            playList.style.display = 'none';
-        } else if (playlistFlag === 1) {
-            playList.style.display = 'inline';
-            playList.textContent = '▶️'
-        } else {
-            playList.style.display = 'inline';
-            playList.textContent = '生成播放列表'
-        }
-
-        // 更新列表
         const rootUI = document.getElementById('root');
         rootUI.innerHTML = pathName;
 
         const fileList = document.getElementById('fileList');
         fileList.innerHTML = '';
-        files.forEach(file => {
+        files.forEach((file) => {
             fileList.innerHTML += createFileItem(file);
         });
+
+        initFocus(fileListContainer);
     } catch (error) {
         console.error('获取文件列表失败:', error);
         Swal.fire('错误', '无法获取文件列表，请稍后重试', 'error');
     } finally {
-        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+        hideLoading();
     }
 }
 
 function enterDir(filename) {
-    fetchFileList("enter", filename).then(r => {});
+    fetchFileList('enter', filename);
 }
 
-let player = videojs('#video');
+function isPlayerFullscreen() {
+    return (
+        player.isFullscreen() ||
+        !!document.fullscreenElement ||
+        !!document.webkitFullscreenElement ||
+        !!document.mozFullScreenElement ||
+        !!document.msFullscreenElement
+    );
+}
 
-player.on('canplay', function() {
+let player = videojs('#video', {
+    controlBar: {
+        // 自定义控制栏设置（如果需要）
+    },
+    userActions: {
+        hotkeys: false // 禁用默认键盘快捷键
+    }
+});
+
+player.on('fullscreenchange', () => {
+    if (isPlayerFullscreen()) {
+        console.log('Entered fullscreen, initializing focus');
+        initFocus(videoContainer);
+    } else {
+        console.log('Exited fullscreen, initializing focus');
+        initFocus(videoContainer);
+    }
+});
+
+player.on('canplay', function () {
     if (videoTm !== null && !isNaN(videoTm) && videoTm >= 0) {
         console.log('Canplay fired, attempting seek to:', videoTm);
         const trySeek = (attempt = 1) => {
@@ -214,61 +240,61 @@ player.on('canplay', function() {
     }
 });
 
-//player.landscapeFullscreen();
-
 let lastVideoTmReport = 0;
 
-player.on("timeupdate", function(event) {
+player.on('timeupdate', function () {
     if (Math.floor(Date.now() / 1000) - lastVideoTmReport > 2) {
-        saveVideoTm(player.currentTime()).then(() => {});
+        saveVideoTm(player.currentTime());
         lastVideoTmReport = Math.floor(Date.now() / 1000);
     }
-})
+});
+
 player.on('ended', async function () {
     await onPlayFinish();
 });
 
-player.on('error', function() {
-    console.log('XXXXX',player.error);
+player.on('error', function () {
+    console.log('Video error:', player.error());
 });
-
 
 videojs.hook('beforeerror', (player, err) => {
     if (err !== null) {
         const errMsg = err.message + err.toString();
-        if (errMsg.includes('No compatible source') || errMsg.includes('Format error')
-            || errMsg.includes('NotSupportedError')) {
-            console.log('---8', "No compatible source", err)
+        if (errMsg.includes('No compatible source') || errMsg.includes('Format error') || errMsg.includes('NotSupportedError')) {
+            console.log('Video source error:', err);
         } else {
-            console.log('err--', errMsg)
-            console.log('err 2--', err)
+            console.log('Video error:', errMsg, err);
         }
     }
-
-    return err
-})
+    return err;
+});
 
 function changeVideoSrc(file) {
     player.pause();
-    setVideoSrc(root+"/"+file).then(() => {});;
+    setVideoSrc(root + '/' + file);
 }
 
 function openFile(filename) {
+    isSwitchingPage = true;
     document.getElementById('playingVideo').textContent = '';
-    document.getElementById('file-list-container').style.display = 'none';
-    document.getElementById('video-container').style.display = 'block';
+    fileListContainer.style.display = 'none';
+    videoContainer.style.display = 'block';
     changeVideoSrc(filename);
+    initFocus(videoContainer);
+    setTimeout(() => {
+        isSwitchingPage = false;
+    }, 1000);
 }
 
 function videoBack() {
     player.pause();
-    document.getElementById('video-container').style.display = 'none';
-    document.getElementById('file-list-container').style.display = 'block';
-    fetchFileList('flush').then(()=>{});
+    videoContainer.style.display = 'none';
+    fileListContainer.style.display = 'block';
+    fetchFileList('flush');
 }
 
 function openSourceSelectionDialog() {
-    document.getElementById('sourceSelectionDialog').style.display = 'block';
+    openDialog('sourceSelectionDialog');
 }
 
 function closeSourceSelectionDialog() {
@@ -276,8 +302,8 @@ function closeSourceSelectionDialog() {
 }
 
 function openSMBDialog() {
-    document.getElementById('smbDialog').style.display = 'block';
     closeSourceSelectionDialog();
+    openDialog('smbDialog');
 }
 
 function closeSMBDialog() {
@@ -294,8 +320,9 @@ function testSMBConnection() {
         smb_address: address,
         smb_user: username,
         smb_password: password,
-    }).then(()=>{});
+    });
 }
+
 
 function confirmSMB() {
     const address = document.getElementById('smbAddress').value;
@@ -307,7 +334,7 @@ function confirmSMB() {
         smb_address: address,
         smb_user: username,
         smb_password: password,
-    }).then(()=>{
+    }).then(() => {
         closeSMBDialog();
     });
 }
@@ -320,7 +347,7 @@ async function testRoot(data) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(data),
         });
 
         if (!response.ok) {
@@ -328,16 +355,14 @@ async function testRoot(data) {
         }
 
         const resp = await response.json();
-        const statusCode = resp["status_code"];
-        const message = resp["message"];
+        const statusCode = resp['status_code'];
+        const message = resp['message'];
         if (statusCode === 0) {
             Swal.fire({
                 title: '成功',
                 text: '测试成功',
                 icon: 'success',
-                customClass: {
-                    popup: 'swal-popup-top'
-                }
+                customClass: { popup: 'swal-popup-top' },
             });
             return;
         }
@@ -346,22 +371,18 @@ async function testRoot(data) {
             title: '失败',
             text: '测试失败: ' + message,
             icon: 'error',
-            customClass: {
-                popup: 'swal-popup-top'
-            }
+            customClass: { popup: 'swal-popup-top' },
         });
     } catch (error) {
-        console.error('获取文件列表失败:', error);
+        console.error('测试根目录失败:', error);
         Swal.fire({
             title: '错误',
-            text: '无法获取文件列表，请稍后重试',
+            text: '无法测试根目录，请稍后重试',
             icon: 'error',
-            customClass: {
-                popup: 'swal-popup-top'
-            }
+            customClass: { popup: 'swal-popup-top' },
         });
     } finally {
-        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+        hideLoading();
     }
 }
 
@@ -373,19 +394,19 @@ async function addRoot(data) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(data),
         });
 
         if (!response.ok) {
             throw new Error('网络响应失败');
         }
 
-        fetchFileList().then(()=>{});
+        fetchFileList();
     } catch (error) {
-        console.error('获取文件列表失败:', error);
-        Swal.fire('错误', '无法获取文件列表，请稍后重试', 'error');
+        console.error('添加根目录失败:', error);
+        Swal.fire('错误', '无法添加根目录，请稍后重试', 'error');
     } finally {
-        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+        hideLoading();
     }
 }
 
@@ -397,26 +418,26 @@ async function reName(data) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(data),
         });
 
         if (!response.ok) {
             throw new Error('网络响应失败');
         }
 
-        fetchFileList().then(()=>{});
+        fetchFileList();
     } catch (error) {
         console.error('重命名失败:', error);
         Swal.fire('错误', '重命名失败，请稍后重试', 'error');
     } finally {
-        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+        hideLoading();
     }
 }
 
 function showRenameRootDialog() {
     closeRenameRootDialog();
     document.getElementById('reName').value = '';
-    document.getElementById('renameRootDialog').style.display = 'block';
+    openDialog('renameRootDialog');
 }
 
 function closeRenameRootDialog() {
@@ -425,7 +446,7 @@ function closeRenameRootDialog() {
 
 function showDirectoryDialog() {
     closeSourceSelectionDialog();
-    document.getElementById('directoryDialog').style.display = 'block';
+    openDialog('directoryDialog');
 }
 
 function closeDirectoryDialog() {
@@ -434,20 +455,18 @@ function closeDirectoryDialog() {
 
 function testDirectoryName() {
     const directoryName = document.getElementById('directoryName').value;
-    console.log("测试目录名称:", directoryName);
     testRoot({
         rtype: 'local',
         local_path: directoryName,
-    }).then(()=>{});
+    });
 }
 
 function confirmDirectoryName() {
     const directoryName = document.getElementById('directoryName').value;
-
     addRoot({
         rtype: 'local',
         local_path: directoryName,
-    }).then(()=>{
+    }).then(() => {
         closeDirectoryDialog();
     });
 }
@@ -457,7 +476,7 @@ async function playlistGen() {
         await openPlaylistDialog();
     } else if (playlistFlag === 1) {
         root = playlistID;
-        await fetchFileList("flush");
+        await fetchFileList('flush');
     }
 }
 
@@ -472,7 +491,7 @@ async function openPlaylistDialog() {
             body: JSON.stringify({
                 path: root,
                 only_video_files: true,
-            })
+            }),
         });
 
         if (!response.ok) {
@@ -480,25 +499,25 @@ async function openPlaylistDialog() {
         }
 
         const resp = await response.json();
-        const items = resp["items"];
+        const items = resp['items'];
         previewAndSavePlaylistDialog(items);
     } catch (error) {
-        console.error('获取文件列表失败:', error);
-        Swal.fire('错误', '无法获取文件列表，请稍后重试', 'error');
+        console.error('获取播放列表失败:', error);
+        Swal.fire('错误', '无法获取播放列表，请稍后重试', 'error');
     } finally {
-        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+        hideLoading();
     }
 }
 
 function previewAndSavePlaylistDialog(files) {
     const playlistDialog = document.getElementById('playlistDialog');
     const playlist = document.getElementById('playlist');
-    playlist.innerHTML = ''; // 清空列表内容
+    playlist.innerHTML = '';
 
     files.forEach((file, index) => {
         const li = document.createElement('li');
         li.textContent = file;
-        li.draggable = true;
+        li.tabIndex = 0;
         li.style.padding = '10px';
         li.style.border = '1px solid #ccc';
         li.style.marginBottom = '5px';
@@ -506,11 +525,9 @@ function previewAndSavePlaylistDialog(files) {
         li.style.wordBreak = 'break-all';
         li.dataset.index = index;
 
-        // 添加拖动事件
         li.addEventListener('dragstart', (e) => {
             e.dataTransfer.setData('text/plain', e.target.dataset.index);
             e.target.classList.add('dragging');
-            // Safari 兼容性：设置拖动图像
             const dragImage = document.createElement('div');
             dragImage.textContent = e.target.textContent;
             dragImage.style.position = 'absolute';
@@ -543,12 +560,13 @@ function previewAndSavePlaylistDialog(files) {
             e.target.classList.remove('dragging');
         });
 
-        // 添加拖出对话框删除功能
         li.addEventListener('dragend', (e) => {
             const rect = playlistDialog.getBoundingClientRect();
             if (
-                e.clientX < rect.left || e.clientX > rect.right ||
-                e.clientY < rect.top || e.clientY > rect.bottom
+                e.clientX < rect.left ||
+                e.clientX > rect.right ||
+                e.clientY < rect.top ||
+                e.clientY > rect.bottom
             ) {
                 Swal.fire({
                     title: '确认删除',
@@ -559,7 +577,7 @@ function previewAndSavePlaylistDialog(files) {
                     cancelButtonText: '取消',
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        li.remove(); // 删除拖出的列表项
+                        li.remove();
                     }
                 });
             }
@@ -569,31 +587,29 @@ function previewAndSavePlaylistDialog(files) {
         playlist.appendChild(li);
     });
 
-    // 自动滚动功能
     playlist.addEventListener('dragover', (e) => {
         e.preventDefault();
-        const scrollThreshold = 20; // 距离边缘的阈值
-        const scrollSpeed = 5; // 滚动速度
-
+        const scrollThreshold = 20;
+        const scrollSpeed = 5;
         const rect = playlist.getBoundingClientRect();
         if (e.clientY < rect.top + scrollThreshold) {
-            playlist.scrollTop -= scrollSpeed; // 向上滚动
+            playlist.scrollTop -= scrollSpeed;
         } else if (e.clientY > rect.bottom - scrollThreshold) {
-            playlist.scrollTop += scrollSpeed; // 向下滚动
+            playlist.scrollTop += scrollSpeed;
         }
     });
 
-    const titleBar = document.getElementById("playlistTitle"); // 修复选择器错误
-
+    const titleBar = document.getElementById('playlistTitle');
     playlistDialog.style.position = 'absolute';
     let isDragging = false;
-    let offsetX = 0, offsetY = 0;
+    let offsetX = 0,
+        offsetY = 0;
 
     titleBar.addEventListener('mousedown', (e) => {
         isDragging = true;
         offsetX = e.clientX - playlistDialog.offsetLeft;
         offsetY = e.clientY - playlistDialog.offsetTop;
-        playlistDialog.style.zIndex = 1000; // 确保在最上层
+        playlistDialog.style.zIndex = 1000;
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -608,6 +624,7 @@ function previewAndSavePlaylistDialog(files) {
     });
 
     playlistDialog.style.display = 'flex';
+    initFocus(playlistDialog);
 }
 
 function closePlaylistDialog() {
@@ -617,7 +634,7 @@ function closePlaylistDialog() {
 function confirmPlaylist() {
     const playlist = document.getElementById('playlist');
     const items = Array.from(playlist.children).map((li) => li.textContent);
-    savePlaylist(items).then(()=>{
+    savePlaylist(items).then(() => {
         closePlaylistDialog();
     });
 }
@@ -633,20 +650,19 @@ async function savePlaylist(items) {
             body: JSON.stringify({
                 path: root,
                 items: items,
-            })
+            }),
         });
 
         if (!response.ok) {
             throw new Error('网络响应失败');
         }
 
-        const resp = await response.json();
-        // TODO
+        await fetchFileList();
     } catch (error) {
         console.error('保存播放列表失败:', error);
         Swal.fire('错误', '无法保存播放列表，请稍后重试', 'error');
     } finally {
-        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+        hideLoading();
     }
 }
 
@@ -662,7 +678,7 @@ async function onPlayFinish() {
             },
             body: JSON.stringify({
                 path: curPlayingVideo,
-            })
+            }),
         });
 
         if (!response.ok) {
@@ -670,7 +686,7 @@ async function onPlayFinish() {
         }
 
         const resp = await response.json();
-        const next = resp["next"];
+        const next = resp['next'];
         if (curPlayingVideo === playingVideo) {
             if (next !== '') {
                 changeVideoSrc(next);
@@ -679,13 +695,12 @@ async function onPlayFinish() {
             }
         }
     } catch (error) {
-        console.error('保存播放列表失败:', error);
-        Swal.fire('错误', '无法保存播放列表，请稍后重试', 'error');
+        console.error('播放完成处理失败:', error);
+        Swal.fire('错误', '无法处理播放完成，请稍后重试', 'error');
     } finally {
-        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+        hideLoading();
     }
 }
-
 
 async function removeRoot() {
     showLoading();
@@ -697,7 +712,7 @@ async function removeRoot() {
             },
             body: JSON.stringify({
                 path: root,
-            })
+            }),
         });
 
         if (!response.ok) {
@@ -705,101 +720,512 @@ async function removeRoot() {
         }
 
         const resp = await response.json();
-        const statusCode = resp["statusCode"];
+        const statusCode = resp['statusCode'];
         if (statusCode === 0) {
             root = '';
-
             Swal.fire({
                 title: '成功',
                 text: '移除成功',
                 icon: 'success',
-                customClass: {
-                    popup: 'swal-popup-top'
-                }
+                customClass: { popup: 'swal-popup-top' },
             });
-
-            fetchFileList().then(()=>{});
-
-            return
+            fetchFileList();
+            return;
         }
 
-        Swal.fire('错误', resp["message"], 'error');
+        Swal.fire('错误', resp['message'], 'error');
     } catch (error) {
-        console.error('保存播放列表失败:', error);
-        Swal.fire('错误', '无法保存播放列表，请稍后重试', 'error');
+        console.error('移除根目录失败:', error);
+        Swal.fire('错误', '无法移除根目录，请稍后重试', 'error');
     } finally {
-        hideLoading(); // 请求完成（成功或失败）时隐藏遮罩
+        hideLoading();
     }
 }
 
 function confirmRenameRoot() {
     const reNameText = document.getElementById('reName').value;
-
     reName({
         root: root,
         name: reNameText,
-    }).then(()=>{
+    }).then(() => {
         closeRenameRootDialog();
     });
 }
 
-window.onload = function() {
-    fetchFileList().then(()=>{});
+function initFocus(container = document) {
+    const setFocus = () => {
+        const focusableElements = getFocusableElements(container);
+        let firstItem = null;
 
-    document.addEventListener('keydown', function(event) {
-        // 仅在全屏模式下响应遥控器事件
-        if (player.isFullscreen()) {
-            switch(event.key) {
-                case 'ArrowRight': // 右键：快进 10 秒
-                    event.preventDefault();
-                    player.currentTime(player.currentTime() + 10);
-                    break;
-
-                case 'ArrowLeft': // 左键：快退 10 秒
-                    event.preventDefault();
-                    player.currentTime(player.currentTime() - 10);
-                    break;
-
-                case 'Enter': // OK/Enter 键：播放/暂停
-                    event.preventDefault();
-                    if (player.paused()) {
-                        player.play();
-                    } else {
-                        player.pause();
-                    }
-                    break;
-
-                case 'ArrowUp': // 上键：音量增加
-                    event.preventDefault();
-                    player.volume(Math.min(player.volume() + 0.1, 1));
-                    break;
-
-                case 'ArrowDown': // 下键：音量减少
-                    event.preventDefault();
-                    player.volume(Math.max(player.volume() - 0.1, 0));
-                    break;
-
-                case 'Escape': // 退出键：退出全屏
-                    event.preventDefault();
-                    player.exitFullscreen();
-                    break;
-
-                default:
-                    console.log('未绑定的按键:', event.key);
-                    break;
-            }
+        if (container === videoContainer) {
+            firstItem = videoContainer.querySelector('.vjs-play-control') ||
+                videoContainer.querySelector('.vjs-progress-control') ||
+                videoContainer.querySelector('.vjs-volume-control') ||
+                videoContainer.querySelector('.vjs-fullscreen-control') ||
+                focusableElements[0];
+            console.log('Focusable elements in videoContainer:', focusableElements.map(el => el.outerHTML));
+        } else {
+            firstItem = focusableElements[0];
         }
+
+        if (firstItem && firstItem !== document.activeElement) {
+            firstItem.focus();
+            currentFocus = firstItem;
+            console.log('Focus initialized on:', firstItem.outerHTML, 'isVideoPlaying:', isVideoPlaying);
+        } else if (!firstItem) {
+            console.warn('No focusable elements found in container:', container, 'isVideoPlaying:', isVideoPlaying);
+            document.body.focus();
+            currentFocus = document.body;
+        }
+    };
+
+    if (container === videoContainer) {
+        setTimeout(setFocus, 100);
+    } else {
+        setFocus();
+    }
+}
+
+function getFocusableElements(container = document) {
+    const elements = Array.from(
+        container.querySelectorAll(
+            '.file-item, button, input, .current-path, #playlist li, [tabindex="0"], ' +
+            '.vjs-control.vjs-button, .vjs-progress-control, .vjs-volume-control, .vjs-fullscreen-control'
+        )
+    ).filter((el) => {
+        const isVisible = el.offsetParent !== null && !el.disabled;
+        if (!isVisible && (el.classList.contains('vjs-play-control') || el.classList.contains('vjs-fullscreen-control'))) {
+            console.warn('Control not visible:', el.outerHTML);
+        }
+        return isVisible;
     });
+    console.log('Focusable elements:', elements.map(el => el.outerHTML));
+    return elements;
+}
+
+function ensureVisible(element) {
+    const container = element.closest('.file-list, #playlist, .dialog');
+    if (container) {
+        const rect = element.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        if (rect.top < containerRect.top) {
+            container.scrollTop -= containerRect.top - rect.top;
+        } else if (rect.bottom > containerRect.bottom) {
+            container.scrollTop += rect.bottom - containerRect.bottom;
+        }
+    }
+}
+
+function openDialog(dialogId) {
+    const dialog = document.getElementById(dialogId);
+    dialog.style.display = dialogId === 'playlistDialog' ? 'flex' : 'block';
+    initFocus(dialog);
+}
+
+let isSwitchingPage = false; // 新增标志，防止快速切换
+
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        const context = this;
+        const event = args[0]; // 假设第一个参数是事件对象
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), wait);
+    };
+}
+
+const debouncedPlayPause = debounce((event) => {
+    if (currentFocus.classList.contains('vjs-play-control')) {
+        console.log('Debounced enter on .vjs-play-control, paused:', player.paused());
+        if (player.paused()) {
+            player.play();
+            console.log('Enter triggered play on .vjs-play-control');
+        } else {
+            player.pause();
+            console.log('Enter triggered pause on .vjs-play-control');
+            // 延迟检查暂停状态
+            setTimeout(() => {
+                if (!player.paused()) {
+                    console.warn('Unexpected play after pause, forcing pause');
+                    player.pause();
+                }
+            }, 100);
+        }
+        event.stopPropagation();
+        event.preventDefault();
+    }
+}, 300);
+
+const debouncedMuteToggle = debounce((event) => {
+    if (currentFocus.classList.contains('vjs-mute-control')) {
+        console.log('Debounced enter on .vjs-mute-control, muted:', player.muted());
+        player.muted(!player.muted());
+        console.log('Enter triggered mute toggle, muted:', player.muted());
+        event.stopPropagation();
+        event.preventDefault();
+    }
+}, 300);
+
+document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' || event.keyCode === 27 || event.key === 'Back') {
+        console.log('Global Escape/Back key captured:', {
+            key: event.key,
+            code: event.code,
+            keyCode: event.keyCode,
+            which: event.which
+        });
+        event.preventDefault();
+        event.stopPropagation();
+    }
+}, { capture: true });
+
+document.addEventListener('keydown', function (event) {
+    if (isSwitchingPage) {
+        event.preventDefault();
+        console.log('Ignoring keydown during page switch:', event.key);
+        return;
+    }
+
+    console.log('按键详情:', {
+        key: event.key,
+        code: event.code,
+        keyCode: event.keyCode,
+        which: event.which,
+        currentFocus: currentFocus?.outerHTML || 'null',
+        isFullscreen: isPlayerFullscreen()
+    });
+
+    const dialogs = document.querySelectorAll(
+        '#smbDialog, #renameRootDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog'
+    );
+    const isDialogOpen = Array.from(dialogs).some(
+        (dialog) => dialog.style.display === 'block' || dialog.style.display === 'flex'
+    );
+
+    let focusableElements = [];
+    let container = document;
+    if (isDialogOpen) {
+        container = Array.from(dialogs).find(
+            (dialog) => dialog.style.display === 'block' || dialog.style.display === 'flex'
+        );
+        focusableElements = getFocusableElements(container);
+    } else if (videoContainer.style.display === 'block') {
+        container = videoContainer;
+        focusableElements = getFocusableElements(videoContainer);
+    } else {
+        container = fileListContainer;
+        focusableElements = getFocusableElements(fileListContainer);
+    }
+
+    const currentIndex = focusableElements.indexOf(document.activeElement);
+    if (currentIndex >= 0) {
+        currentFocus = focusableElements[currentIndex];
+    } else if (focusableElements.length > 0) {
+        currentFocus = focusableElements[0];
+        currentFocus.focus();
+    }
+
+    const key = event.key;
+    const keyCode = event.keyCode || event.which;
+
+    let action = null;
+    switch (true) {
+        case key === 'ArrowUp' || key === 'Up' || keyCode === 38:
+            action = 'up';
+            break;
+        case key === 'ArrowDown' || key === 'Down' || keyCode === 40:
+            action = 'down';
+            break;
+        case key === 'ArrowLeft' || key === 'Left' || keyCode === 37:
+            action = 'left';
+            break;
+        case key === 'ArrowRight' || key === 'Right' || keyCode === 39:
+            action = 'right';
+            break;
+        case key === 'Enter' || key === 'OK' || keyCode === 13:
+            action = 'enter';
+            break;
+        case key === 'Escape' || key === 'Back' || keyCode === 27:
+            action = 'escape';
+            break;
+        default:
+            console.log('未绑定的按键:', key, keyCode);
+            return;
+    }
+
+    event.preventDefault();
+
+    if (isPlayerFullscreen()) {
+        switch (action) {
+            case 'right':
+                player.currentTime(player.currentTime() + 10);
+                console.log('Full screen: Seek forward 10s');
+                break;
+            case 'left':
+                player.currentTime(player.currentTime() - 10);
+                console.log('Full screen: Seek backward 10s');
+                break;
+            case 'up':
+                player.volume(Math.min(player.volume() + 0.1, 1));
+                console.log('Full screen: Volume up', player.volume());
+                break;
+            case 'down':
+                player.volume(Math.max(player.volume() - 0.1, 0));
+                console.log('Full screen: Volume down', player.volume());
+                break;
+            case 'enter':
+                if (player.paused()) {
+                    player.play();
+                    console.log('Full screen: Play');
+                } else {
+                    player.pause();
+                    console.log('Full screen: Pause');
+                }
+                break;
+            case 'escape':
+                player.exitFullscreen();
+                initFocus(videoContainer);
+                console.log('Full screen: Exit fullscreen');
+                break;
+        }
+    } else {
+        switch (action) {
+            case 'up':
+                if (currentIndex > 0) {
+                    currentFocus = focusableElements[currentIndex - 1];
+                    currentFocus.focus();
+                    ensureVisible(currentFocus);
+                    console.log('Focus moved up to:', currentFocus.outerHTML);
+                }
+                break;
+            case 'down':
+                if (currentIndex < focusableElements.length - 1) {
+                    currentFocus = focusableElements[currentIndex + 1];
+                    currentFocus.focus();
+                    ensureVisible(currentFocus);
+                    console.log('Focus moved down to:', currentFocus.outerHTML);
+                }
+                break;
+            case 'left':
+                if (videoContainer.style.display === 'block') {
+                    player.currentTime(player.currentTime() - 10);
+                    console.log('Non-fullscreen: Seek backward 10s');
+                } else if (isDialogOpen) {
+                    const buttons = getFocusableElements(container).filter((el) => el.tagName === 'BUTTON');
+                    const currentButtonIndex = buttons.indexOf(currentFocus);
+                    if (currentButtonIndex > 0) {
+                        currentFocus = buttons[currentButtonIndex - 1];
+                        currentFocus.focus();
+                        console.log('Focus moved left to:', currentFocus.outerHTML);
+                    }
+                }
+                break;
+            case 'right':
+                if (videoContainer.style.display === 'block') {
+                    player.currentTime(player.currentTime() + 10);
+                    console.log('Non-fullscreen: Seek forward 10s');
+                } else if (isDialogOpen) {
+                    const buttons = getFocusableElements(container).filter((el) => el.tagName === 'BUTTON');
+                    const currentButtonIndex = buttons.indexOf(currentFocus);
+                    if (currentButtonIndex < buttons.length - 1) {
+                        currentFocus = buttons[currentButtonIndex + 1];
+                        currentFocus.focus();
+                        console.log('Focus moved right to:', currentFocus.outerHTML);
+                    }
+                }
+                break;
+            case 'enter':
+                if (videoContainer.style.display === 'block') {
+                    const isVideoControl = currentFocus && (
+                        currentFocus.classList.contains('vjs-control') ||
+                        currentFocus.closest('.vjs-progress-control') ||
+                        currentFocus.closest('.vjs-volume-control') ||
+                        currentFocus.closest('.vjs-fullscreen-control')
+                    );
+
+                    if (isVideoControl) {
+                        if (currentFocus.classList.contains('vjs-play-control')) {
+                            debouncedPlayPause(event);
+                        } else if (currentFocus.classList.contains('vjs-mute-control')) {
+                            debouncedMuteToggle(event);
+                        } else if (currentFocus.classList.contains('vjs-fullscreen-control')) {
+                            if (isPlayerFullscreen()) {
+                                player.exitFullscreen();
+                                console.log('Enter triggered exit fullscreen');
+                            } else {
+                                player.requestFullscreen();
+                                console.log('Enter triggered request fullscreen');
+                            }
+                        } else {
+                            currentFocus.click();
+                            console.log('Enter triggered click on:', currentFocus.outerHTML);
+                        }
+                        return; // 阻止后续 click 操作
+                    } else if (currentFocus) {
+                        currentFocus.click();
+                        console.log('Enter triggered click on:', currentFocus.outerHTML);
+                    } else {
+                        if (player.paused()) {
+                            player.play();
+                            console.log('Enter triggered play (no focus)');
+                        } else {
+                            player.pause();
+                            console.log('Enter triggered pause (no focus)');
+                        }
+                    }
+                } else if (currentFocus) {
+                    currentFocus.click();
+                    console.log('Enter triggered click on:', currentFocus.outerHTML);
+                }
+                break;
+            case 'escape':
+                if (isDialogOpen) {
+                    const openDialog = Array.from(dialogs).find(
+                        (dialog) => dialog.style.display === 'block' || dialog.style.display === 'flex'
+                    );
+                    const cancelButton = openDialog.querySelector('button[onclick*="close"]');
+                    if (cancelButton) {
+                        cancelButton.click();
+                        console.log('Escape closed dialog');
+                    }
+                } else if (videoContainer.style.display === 'block') {
+                    isSwitchingPage = true;
+                    videoBack();
+                    console.log('Escape triggered videoBack');
+                    setTimeout(() => {
+                        isSwitchingPage = false;
+                    }, 1000);
+                } else if (fileListContainer.style.display === 'block') {
+                    isSwitchingPage = true;
+                    fetchFileList('leave');
+                    console.log('Escape triggered fetchFileList(leave)');
+                    setTimeout(() => {
+                        isSwitchingPage = false;
+                    }, 1000);
+                }
+                break;
+        }
+    }
+}, { capture: true });
+
+let isVideoPlaying = false; // 新增标志，跟踪视频播放状态
+
+player.on('play', () => {
+    isVideoPlaying = true;
+    console.log('Video is playing, isVideoPlaying:', isVideoPlaying);
+});
+
+player.on('pause', () => {
+    isVideoPlaying = false;
+    console.log('Video is paused, isVideoPlaying:', isVideoPlaying);
+});
+
+// 监听 DOM 变化，重新初始化焦点
+const observer = new MutationObserver(() => {
+    if (isSwitchingPage) {
+        console.log('MutationObserver ignored during page switch');
+        return;
+    }
+    if (isVideoPlaying && videoContainer.style.display === 'block') {
+        console.log('MutationObserver ignored during video playback');
+        return;
+    }
+    if (fileListContainer.style.display === 'block') {
+        console.log('Initializing focus for fileListContainer');
+        initFocus(fileListContainer);
+    } else if (videoContainer.style.display === 'block') {
+        console.log('Initializing focus for videoContainer');
+        initFocus(videoContainer);
+    }
+});
+observer.observe(document.body, { childList: true, subtree: true });
+
+window.onload = function () {
+    fetchFileList();
 };
 
-// 添加全局样式以确保 Swal 弹窗在最上层
+function debounce(func, wait) {
+    let timeout;
+    return function (...args) {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+}
+
+document.addEventListener('click', debounce(() => {
+    if (fileListContainer.style.display === 'block') {
+        initFocus(fileListContainer);
+    } else if (videoContainer.style.display === 'block') {
+        initFocus(videoContainer);
+    }
+}, 200));
+
+document.addEventListener('focusin', (event) => {
+    const focusableElements = getFocusableElements(document);
+    if (focusableElements.includes(event.target)) {
+        if (isVideoPlaying && event.target.classList.contains('vjs-control') && event.target !== currentFocus) {
+            console.log('Preventing video.js auto-focus during playback');
+            currentFocus.focus();
+            return;
+        }
+        currentFocus = event.target;
+        console.log('Focus changed to:', currentFocus.outerHTML);
+    }
+});
+
 const style = document.createElement('style');
 style.innerHTML = `
     .swal-popup-top {
-        z-index: 9999 !important; /* 提高 z-index 确保在所有元素之上 */
+        z-index: 9999 !important;
     }
     .swal2-container {
-        z-index: 9999 !important; /* 确保 Swal2 弹窗容器也在最上层 */
+        z-index: 9999 !important;
     }
 `;
 document.head.appendChild(style);
+
+window.addEventListener('beforeunload', (event) => {
+    // 仅在特定条件下（如有未保存更改）显示退出提示
+    const isPlayingVideo = videoContainer.style.display === 'block' && !player.paused();
+    const hasOpenDialog = document.querySelectorAll(
+        '#smbDialog, #renameRootDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog'
+    ).some(dialog => dialog.style.display === 'block' || dialog.style.display === 'flex');
+
+    if (isPlayingVideo || hasOpenDialog) {
+        console.log('beforeunload triggered, preventing exit due to active video or dialog');
+        event.preventDefault();
+        event.returnValue = ''; // 触发浏览器默认提示（可根据需求禁用）
+    } else {
+        console.log('beforeunload allowed: no active video or dialog');
+    }
+});
+
+window.goBack = function () {
+    console.log('goBack called, videoContainer.display:', videoContainer.style.display, 'pathName:', pathName);
+
+    // Check if on the video playback page
+    if (videoContainer.style.display === 'block') {
+        console.log('On video playback page, returning false');
+        isSwitchingPage = true;
+        videoBack();
+        setTimeout(() => {
+            isSwitchingPage = false;
+        }, 1000);
+        return false;
+    }
+
+    // Check if current path is not empty
+    if (pathName !== '') {
+        console.log('Path is not empty, simulating click on .. (fetchFileList leave)');
+        isSwitchingPage = true;
+        fetchFileList('leave');
+        setTimeout(() => {
+            isSwitchingPage = false;
+        }, 1000);
+        return false;
+    }
+
+    // No video playing and at root path, allow back action
+    console.log('At root path with no video, returning true');
+    return true;
+};

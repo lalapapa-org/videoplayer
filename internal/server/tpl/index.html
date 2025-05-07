@@ -4,25 +4,30 @@
     <meta charset="UTF-8">
     <title>LanVideoPlayer</title>
     <link href="/static/videojs/video-js.css" rel="stylesheet">
-    <link rel="stylesheet" href="/static/styles.css"> <!-- 引入外部 CSS -->
+    <link rel="stylesheet" href="/static/styles.css">
     <link href="/static/sweetalert2/sweetalert2.min.css" rel="stylesheet">
-    <meta charset="utf-8">
-    <meta name="viewport"
-          content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no"/>
+    <!-- 添加全局焦点样式 -->
+    <style>
+        :focus {
+            outline: 4px solid #007BFF !important;
+            background-color: #b3e5fc !important;
+            box-shadow: 0 0 8px rgba(0, 123, 255, 0.7) !important;
+        }
+    </style>
 </head>
-<body>
+<body tabindex="0">
 <div class="file-list-container" id="file-list-container">
     <div class="controls">
-        <button onclick="fetchFileList()">获取最新列表</button>
-        <button onclick="openSourceSelectionDialog()">选择来源</button>
-        <button id="playlistGen" onclick="playlistGen()">生成播放列表</button>
-        <button id="removeRoot" onclick="removeRoot()">移除存储</button>
-        <button id="renameRoot" onclick="showRenameRootDialog()">重命名存储</button>
+        <button tabindex="0" onclick="fetchFileList()">获取最新列表</button>
+        <button tabindex="0" onclick="openSourceSelectionDialog()">选择来源</button>
+        <button tabindex="0" id="playlistGen" onclick="playlistGen()">生成播放列表</button>
+        <button tabindex="0" id="removeRoot" onclick="removeRoot()">移除存储</button>
+        <button tabindex="0" id="renameRoot" onclick="showRenameRootDialog()">重命名存储</button>
     </div>
-    <span class="current-path bordered" id="root" style="display: block !important;"></span>
-    <span class="file-item" onclick="fetchFileList('leave')">..</span>
-    <ul class="file-list" id="fileList">
-    </ul>
+    <span class="current-path bordered" id="root" tabindex="0" onclick="fetchFileList('leave')"></span>
+    <span class="file-item" tabindex="0" onclick="fetchFileList('leave')">..</span>
+    <ul class="file-list" id="fileList"></ul>
 </div>
 
 <div id="loadingOverlay" class="loading-overlay">
@@ -30,86 +35,84 @@
 </div>
 
 <!-- SMB 配置对话框 -->
-<div id="smbDialog">
+<div id="smbDialog" class="dialog">
     <h3>SMB 配置</h3>
     <div>
         <label>地址:</label>
-        <input type="text" id="smbAddress">
+        <input type="text" id="smbAddress" tabindex="0">
     </div>
     <div>
         <label>用户名:</label>
-        <input type="text" id="smbUsername">
+        <input type="text" id="smbUsername" tabindex="0">
     </div>
     <div>
         <label>密码:</label>
-        <input type="password" id="smbPassword">
+        <input type="password" id="smbPassword" tabindex="0">
     </div>
-    <div>
-        <button onclick="testSMBConnection()">测试</button>
-        <button onclick="confirmSMB()">确定</button>
-        <button onclick="closeSMBDialog()">取消</button>
+    <div style="text-align: center;">
+        <button tabindex="0" onclick="testSMBConnection()">测试</button>
+        <button tabindex="0" onclick="confirmSMB()">确定</button>
+        <button tabindex="0" onclick="closeSMBDialog()">取消</button>
     </div>
 </div>
 
 <!-- 目录名称输入对话框 -->
-<div id="renameRootDialog">
+<div id="renameRootDialog" class="dialog">
     <h3>重命名存储</h3>
     <div>
         <label>存储名称:</label>
-        <input type="text" id="reName">
+        <input type="text" id="reName" tabindex="0">
     </div>
-    <div>
-        <button onclick="confirmRenameRoot()">确定</button>
-        <button onclick="closeRenameRootDialog()">取消</button>
+    <div style="text-align: center;">
+        <button tabindex="0" onclick="confirmRenameRoot()">确定</button>
+        <button tabindex="0" onclick="closeRenameRootDialog()">取消</button>
     </div>
 </div>
 
 <!-- 目录名称输入对话框 -->
-<div id="directoryDialog">
+<div id="directoryDialog" class="dialog">
     <h3>输入目录名称</h3>
     <div>
         <label>目录名称:</label>
-        <input type="text" id="directoryName">
+        <input type="text" id="directoryName" tabindex="0">
     </div>
-    <div>
-        <button onclick="testDirectoryName()">测试</button>
-        <button onclick="confirmDirectoryName()">确定</button>
-        <button onclick="closeDirectoryDialog()">取消</button>
+    <div style="text-align: center;">
+        <button tabindex="0" onclick="testDirectoryName()">测试</button>
+        <button tabindex="0" onclick="confirmDirectoryName()">确定</button>
+        <button tabindex="0" onclick="closeDirectoryDialog()">取消</button>
     </div>
 </div>
 
-
-<div id="sourceSelectionDialog">
+<!-- 来源选择对话框 -->
+<div id="sourceSelectionDialog" class="dialog">
     <h3>添加视频目录</h3>
-    <button onclick="showDirectoryDialog()">本地</button>
-    <button onclick="openSMBDialog()">SMB</button>
-    <button onclick="closeSourceSelectionDialog()">取消</button>
+    <div style="text-align: center;">
+        <button tabindex="0" onclick="showDirectoryDialog()">本地</button>
+        <button tabindex="0" onclick="openSMBDialog()">SMB</button>
+        <button tabindex="0" onclick="closeSourceSelectionDialog()">取消</button>
+    </div>
 </div>
 
 <!-- 播放列表对话框 -->
-<div id="playlistDialog">
+<div id="playlistDialog" class="dialog">
     <div id="playlistTitle">播放内容</div>
-    <ul id="playlist">
-        <!-- 列表项将通过 JavaScript 动态生成 -->
-    </ul>
-    <div>
-        <button onclick="confirmPlaylist()">确定</button>
-        <button onclick="closePlaylistDialog()">取消</button>
+    <ul id="playlist"></ul>
+    <div style="text-align: center;">
+        <button tabindex="0" onclick="confirmPlaylist()">确定</button>
+        <button tabindex="0" onclick="closePlaylistDialog()">取消</button>
     </div>
 </div>
 
 <div class="file-list-container hidden" id="video-container">
     <div class="controls">
-        <button onclick="videoBack()">返回</button>
+        <button tabindex="0" onclick="videoBack()">返回</button>
     </div>
-    <video id="video" class="video-js vjs-default-skin vjs-16-9" controls preload="auto">
-
-    </video>
-    <span class="current-path bordered" id="playingVideo"></span>
+    <video id="video" class="video-js vjs-default-skin vjs-16-9" controls preload="auto"></video>
+    <span class="current-path bordered" id="playingVideo" tabindex="0"></span>
 </div>
 
 <script src="/static/videojs/video.min.js"></script>
-<script src="/static/scripts.js"></script> <!-- 引入外部 JS -->
+<script src="/static/scripts.js"></script>
 <script src="/static/sweetalert2/sweetalert2.min.js"></script>
 </body>
 </html>

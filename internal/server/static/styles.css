@@ -1,3 +1,4 @@
+/* 容器样式 */
 .file-list-container {
     max-width: 600px;
     margin: 20px auto;
@@ -8,12 +9,84 @@
     gap: 8px;
 }
 
-.file-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
+.virtual-list-container {
+    height: 400px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: 100%;
+    box-sizing: border-box;
+    position: relative;
+    padding: 4px 8px; /* 增加顶部和右侧内边距 */
 }
 
+.virtual-list-scroller {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+/* 列表样式 */
+.file-list {
+    list-style: none;
+    padding: 12px;
+    margin: 0;
+    position: absolute;
+    top: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.file-item {
+    background: #f9f9f9;
+    padding: 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    display: flex;
+    align-items: center;
+    outline: none;
+    color: #1a1a1a;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+.file-item:hover {
+    background: #e9e9e9;
+}
+
+.file-item:active {
+    background: #ddd;
+}
+
+.file-item:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px #007BFF; /* 移除扩散效果，减少裁剪 */
+    background-color: #b3e5fc;
+}
+
+.file-icon {
+    margin-right: 10px;
+    color: #666;
+    flex: 0 0 auto;
+}
+
+.file-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.file-size {
+    color: #888;
+    font-size: 0.9em;
+    flex: 0 0 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: right;
+}
+
+/* 路径和控件样式 */
 .current-path {
     background: #009898;
     padding: 15px;
@@ -28,52 +101,9 @@
 }
 
 .current-path:focus {
-    outline: 3px solid #007BFF;
-    background-color: #008080; /* 深青色，增加对比度 */
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5); /* 添加阴影以突出 */
-}
-
-.file-item {
-    background: #f9f9f9;
-    padding: 15px;
-    margin-bottom: 5px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    display: flex;
-    align-items: center;
     outline: none;
-    color: #1a1a1a; /* 深色文字，确保对比度 */
-}
-
-.file-item:hover {
-    background: #e9e9e9;
-    transform: translateX(5px);
-}
-
-.file-item:active {
-    background: #ddd;
-}
-
-.file-item:focus {
-    outline: 3px solid #007BFF;
-    background-color: #b3e5fc; /* 稍深的浅蓝色，增加对比度 */
-    transform: translateX(5px);
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
-}
-
-.file-icon {
-    margin-right: 10px;
-    color: #666;
-}
-
-.file-name {
-    flex-grow: 1;
-}
-
-.file-size {
-    color: #888;
-    font-size: 0.9em;
+    box-shadow: 0 0 0 3px #007BFF;
+    background-color: #008080;
 }
 
 .controls {
@@ -83,7 +113,10 @@
     gap: 8px;
 }
 
-button {
+.controls button {
+    z-index: 10;
+    pointer-events: auto;
+    position: relative;
     padding: 10px 20px;
     font-size: 16px;
     border: none;
@@ -95,27 +128,14 @@ button {
     margin-bottom: 10px;
 }
 
-button:focus {
-    outline: 3px solid #007BFF;
-    background-color: #b3e5fc; /* 稍深的浅蓝色 */
-    color: #1a1a1a; /* 深色文字 */
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+.controls button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px #007BFF;
+    background-color: #b3e5fc;
+    color: #1a1a1a;
 }
 
-@media (max-width: 768px) {
-    button {
-        padding: 8px 15px;
-        margin-right: 10px;
-        margin-bottom: 10px;
-        font-size: 18px;
-        min-width: 48px;
-        min-height: 48px;
-    }
-    .file-item:focus, button:focus, input:focus, .current-path:focus {
-        outline-width: 4px; /* 加粗边框，适合电视屏幕 */
-    }
-}
-
+/* 加载覆盖层 */
 .loading-overlay {
     position: absolute;
     top: 0;
@@ -137,35 +157,9 @@ button:focus {
     border-radius: 4px;
 }
 
-#playlistDialog {
-    display: flex;
-    flex-direction: column;
-}
-
-#playlist {
-    overflow-y: auto;
-}
-
-#playlist li {
-    outline: none;
-    color: #1a1a1a; /* 深色文字 */
-}
-
-#playlist li:focus {
-    outline: 3px solid #007BFF;
-    background-color: #b3e5fc; /* 稍深的浅蓝色 */
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
-}
-
-#playlistDialog div[style*="text-align: center;"] {
-    margin-top: auto;
-    padding-bottom: 10px;
-    display: flex;
-    justify-content: center;
-    gap: 10px;
-}
-
-#smbDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog, #renameRootDialog {
+/* 对话框通用样式 */
+.dialog {
+    z-index: 2000 !important;
     display: none;
     position: fixed;
     top: 50%;
@@ -175,51 +169,10 @@ button:focus {
     padding: 20px;
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    z-index: 2000;
 }
 
-#smbDialog {
+#smbDialog, #directoryDialog, #renameRootDialog {
     width: 300px;
-}
-
-#directoryDialog {
-    width: 300px;
-}
-
-#renameRootDialog {
-    width: 300px;
-}
-
-#playlistDialog {
-    width: 400px;
-    height: 500px;
-    max-height: 800px;
-    resize: both;
-    overflow: hidden;
-    flex-flow: column;
-}
-
-#playlistDialog #playlistTitle {
-    width: 100%;
-    height: 40px;
-    color: white;
-    background-color: #b0a03a;
-    cursor: move;
-    box-sizing: border-box;
-    padding: 10px;
-}
-
-#playlistDialog #playlist {
-    list-style: none;
-    height: 1000px;
-    padding: 0;
-    margin: 0;
-    overflow-y: auto;
-    flex-shrink: 1;
-}
-
-#playlistDialog div[style*="text-align: center;"] {
-    margin-top: 20px;
 }
 
 #smbDialog h3, #directoryDialog h3, #renameRootDialog h3 {
@@ -242,27 +195,29 @@ button:focus {
     border: 1px solid #ccc;
     border-radius: 4px;
     outline: none;
-    color: #1a1a1a; /* 深色文字 */
+    color: #1a1a1a;
 }
 
 #smbDialog input:focus, #directoryDialog input:focus, #renameRootDialog input:focus {
-    outline: 3px solid #007BFF;
-    background-color: #b3e5fc; /* 稍深的浅蓝色 */
-    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+    outline: none;
+    box-shadow: 0 0 0 3px #007BFF;
+    background-color: #b3e5fc;
 }
 
 #smbDialog div, #directoryDialog div, #renameRootDialog div {
     margin-bottom: 20px;
 }
 
-#smbDialog div[style*="text-align: center;"], #directoryDialog div[style*="text-align: center;"], #renameRootDialog div[style*="text-align: center;"] {
+#smbDialog div[style*="text-align: center;"],
+#directoryDialog div[style*="text-align: center;"],
+#renameRootDialog div[style*="text-align: center;"] {
     text-align: center;
     display: flex;
     justify-content: center;
     gap: 10px;
 }
 
-#smbDialog button, #directoryDialog button, #playlistDialog button, #renameRootDialog button {
+#smbDialog button, #directoryDialog button, #renameRootDialog button {
     padding: 10px 20px;
     margin-right: 10px;
     border: none;
@@ -275,16 +230,87 @@ button:focus {
     color: white;
 }
 
-#smbDialog button:nth-child(2), #directoryDialog button:nth-child(2), #playlistDialog button:nth-child(1) {
+#smbDialog button:nth-child(2), #directoryDialog button:nth-child(2) {
     background: #28A745;
     color: white;
 }
 
-#smbDialog button:nth-child(3), #directoryDialog button:nth-child(3), #playlistDialog button:nth-child(2), #renameRootDialog button:nth-child(2) {
+#smbDialog button:nth-child(3), #directoryDialog button:nth-child(3), #renameRootDialog button:nth-child(2) {
     background: #DC3545;
     color: white;
 }
 
+/* 播放列表对话框 */
+#playlistDialog {
+    width: 400px;
+    height: 500px;
+    max-height: 800px;
+    resize: both;
+    overflow: hidden;
+    flex-flow: column;
+}
+
+#playlistDialog.active {
+    display: flex;
+    flex-direction: column;
+}
+
+#playlistDialog #playlistTitle {
+    width: 100%;
+    height: 40px;
+    color: white;
+    background-color: #b0a03a;
+    cursor: move;
+    box-sizing: border-box;
+    padding: 10px;
+}
+
+#playlistDialog #playlist {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    overflow-y: auto;
+    flex-shrink: 1;
+    color: #1a1a1a;
+}
+
+#playlistDialog #playlist li {
+    outline: none;
+}
+
+#playlistDialog #playlist li:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px #007BFF;
+    background-color: #b3e5fc;
+}
+
+#playlistDialog div[style*="text-align: center;"] {
+    margin-top: 20px;
+    padding-bottom: 10px;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+#playlistDialog button {
+    padding: 10px 20px;
+    margin-right: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#playlistDialog button:nth-child(1) {
+    background: #28A745;
+    color: white;
+}
+
+#playlistDialog button:nth-child(2) {
+    background: #DC3545;
+    color: white;
+}
+
+/* 其他样式 */
 .hidden {
     display: none;
 }
@@ -293,12 +319,17 @@ button:focus {
     display: none;
 }
 
-.dialog {
-    z-index: 2000 !important;
-}
-
-.controls button {
-    z-index: 10;
-    pointer-events: auto;
-    position: relative;
+/* 响应式设计 */
+@media (max-width: 768px) {
+    .controls button {
+        padding: 8px 15px;
+        margin-right: 10px;
+        margin-bottom: 10px;
+        font-size: 18px;
+        min-width: 48px;
+        min-height: 48px;
+    }
+    .file-item:focus, .controls button:focus, input:focus, .current-path:focus, #playlist li:focus {
+        box-shadow: 0 0 0 4px #007BFF;
+    }
 }

@@ -1,3 +1,4 @@
+// 全局变量（保持不变）
 let root = '';
 let pathName = '';
 let playingVideo = '';
@@ -6,9 +7,16 @@ let playlistFlag = 0;
 let playlistID = '';
 let videoTm = null;
 let currentFocus = null;
+let allFiles = [];
+let itemHeight = 50;
+let visibleItemsCount = 10;
+let lastFocusedIndex = 0;
 
 const fileListContainer = document.getElementById('file-list-container');
 const videoContainer = document.getElementById('video-container');
+const virtualListContainer = document.getElementById('virtual-list-container');
+const virtualListScroller = document.getElementById('virtual-list-scroller');
+const fileList = document.getElementById('fileList');
 
 function showLoading() {
     document.getElementById('loadingOverlay').style.display = 'flex';
@@ -23,20 +31,27 @@ function getFileNameFromPath(path) {
     return parts[parts.length - 1];
 }
 
-function createFileItem(file) {
+function truncateFileName(name, maxLength = 50) {
+    return name.length > maxLength ? name.substring(0, maxLength - 3) + '...' : name;
+}
+
+function createFileItem(file, index) {
+    const truncatedName = truncateFileName(file.name);
+    const escapedName = truncatedName.replace(/"/g, '&quot;'); // 防止 XSS
     if (file.is_dir) {
         return `
-            <li class="file-item" tabindex="0" onclick="enterDir('${file.path}')">
+            <li class="file-item" tabindex="0" data-path="${file.path}" data-index="${index}" onclick="enterDir('${file.path}')">
                 <span class="file-icon">📂</span>
-                <span class="file-name">${file.name}</span>
+                <span class="file-name">${escapedName}</span>
             </li>
         `;
     }
+    const fileSize = file.size ? file.size : ''; // 确保 file.size 存在
     return `
-        <li class="file-item" tabindex="0" onclick="openFile('${file.path}')">
+        <li class="file-item" tabindex="0" data-path="${file.path}" data-index="${index}" onclick="openFile('${file.path}')">
             <span class="file-icon">📄</span>
-            <span class="file-name">${file.name}</span>
-            <span class="file-size">${file.size}</span>
+            <span class="file-name">${escapedName}</span>
+            <span class="file-size">${fileSize}</span>
         </li>
     `;
 }
@@ -129,6 +144,115 @@ async function saveVideoTm(tm) {
     }
 }
 
+function updateItemHeight() {
+    const sampleItem = fileList.querySelector('.file-item');
+    if (sampleItem) {
+        itemHeight = sampleItem.getBoundingClientRect().height;
+        const itemWidth = sampleItem.getBoundingClientRect().width;
+        const containerWidth = virtualListContainer.getBoundingClientRect().width;
+        console.log('Updated itemHeight:', itemHeight, 'itemWidth:', itemWidth, 'containerWidth:', containerWidth);
+        if (itemWidth > containerWidth) {
+            console.warn('file-item width exceeds container width, may cause horizontal scrollbar', {
+                itemWidth,
+                containerWidth
+            });
+        }
+    } else {
+        itemHeight = 50;
+        console.log('Using default itemHeight:', itemHeight);
+    }
+}
+
+function renderVirtualList(scrollTriggered = false, targetIndex = null) {
+    const scrollTop = virtualListContainer.scrollTop;
+    const containerHeight = virtualListContainer.clientHeight;
+    const containerWidth = virtualListContainer.clientWidth;
+    visibleItemsCount = Math.ceil(containerHeight / itemHeight) + 2;
+    const startIndex = Math.floor(scrollTop / itemHeight);
+    const endIndex = Math.min(startIndex + visibleItemsCount, allFiles.length);
+
+    console.log('RenderVirtualList:', {
+        scrollTriggered,
+        targetIndex,
+        startIndex,
+        endIndex,
+        scrollTop,
+        visibleItemsCount,
+        allFilesLength: allFiles.length,
+        lastFocusedIndex,
+        containerWidth
+    });
+
+    // 设置 scroller 高度和宽度
+    virtualListScroller.style.height = `${allFiles.length * itemHeight}px`;
+    virtualListScroller.style.width = '100%';
+
+    // 渲染可视区域的列表项
+    let html = '';
+    for (let i = startIndex; i < endIndex; i++) {
+        html += createFileItem(allFiles[i], i);
+    }
+    fileList.innerHTML = html;
+
+    // 调整 fileList 的位置和宽度
+    fileList.style.top = `${startIndex * itemHeight}px`;
+    fileList.style.width = '100%';
+
+    // 恢复或设置焦点
+    let targetItem = null;
+    if (targetIndex !== null && targetIndex >= startIndex && targetIndex < endIndex) {
+        // 优先处理 targetIndex
+        targetItem = fileList.querySelector(`.file-item[data-index="${targetIndex}"]`);
+        console.log('Attempting to focus targetIndex:', targetIndex, 'targetItem:', targetItem);
+    } else if (targetIndex !== null) {
+        // targetIndex 不在可视区域，调整滚动并重新渲染
+        const newScrollTop = Math.min(targetIndex * itemHeight, (allFiles.length - visibleItemsCount) * itemHeight);
+        console.log('Target index not rendered, adjusting scrollTop:', newScrollTop);
+        virtualListContainer.scrollTop = newScrollTop;
+        requestAnimationFrame(() => {
+            renderVirtualList(false, targetIndex);
+        });
+        return; // 提前返回，避免后续焦点逻辑
+    } else if (scrollTriggered && lastFocusedIndex >= startIndex && lastFocusedIndex < endIndex) {
+        // 滚动触发时恢复 lastFocusedIndex
+        targetItem = fileList.querySelector(`.file-item[data-index="${lastFocusedIndex}"]`);
+        console.log('Restoring lastFocusedIndex on scroll:', lastFocusedIndex, 'targetItem:', targetItem);
+    } else if (currentFocus && currentFocus.classList.contains('file-item')) {
+        // 最后尝试恢复 currentFocus
+        const currentIndex = parseInt(currentFocus.dataset.index, 10);
+        if (currentIndex >= startIndex && currentIndex < endIndex) {
+            targetItem = fileList.querySelector(`.file-item[data-index="${currentIndex}"]`);
+            console.log('Restoring currentIndex:', currentIndex, 'targetItem:', targetItem);
+        }
+    }
+
+    if (targetItem && targetItem !== document.activeElement) {
+        requestAnimationFrame(() => {
+            targetItem.focus();
+            currentFocus = targetItem;
+            lastFocusedIndex = parseInt(targetItem.dataset.index, 10);
+            ensureVisible(targetItem);
+            console.log('Focused targetItem:', targetItem.dataset.index);
+        });
+    } else if (scrollTriggered && !targetItem && lastFocusedIndex < allFiles.length) {
+        const firstVisibleItem = fileList.querySelector(`.file-item[data-index="${startIndex}"]`);
+        if (firstVisibleItem) {
+            requestAnimationFrame(() => {
+                firstVisibleItem.focus();
+                currentFocus = firstVisibleItem;
+                lastFocusedIndex = startIndex;
+                ensureVisible(firstVisibleItem);
+                console.log('Focused first visible item after scroll:', startIndex);
+            });
+        }
+    }
+}
+
+// 滚动事件监听
+virtualListContainer.addEventListener('scroll', debounce(() => {
+    renderVirtualList(true);
+}, 50));
+
 async function fetchFileList(op, dir) {
     showLoading();
     try {
@@ -151,32 +275,42 @@ async function fetchFileList(op, dir) {
         const resp = await response.json();
         root = resp['path'];
         pathName = resp['pathName'];
-        const files = resp['items'];
-
+        allFiles = resp['items'];
         playlistFlag = resp['playlistFlag'];
         playlistID = resp['playlistID'];
         const canRemove = resp['canRemove'];
 
-        const removeRoot = document.getElementById('removeRoot');
-        removeRoot.style.display = canRemove ? 'inline' : 'none';
-
-        const renameRoot = document.getElementById('renameRoot');
-        renameRoot.style.display = canRemove ? 'inline' : 'none';
-
-        const playList = document.getElementById('playlistGen');
-        playList.style.display = playlistFlag === 0 ? 'none' : 'inline';
-        playList.textContent = playlistFlag === 1 ? '▶️' : '生成播放列表';
-
-        const rootUI = document.getElementById('root');
-        rootUI.innerHTML = pathName;
-
-        const fileList = document.getElementById('fileList');
-        fileList.innerHTML = '';
-        files.forEach((file) => {
-            fileList.innerHTML += createFileItem(file);
+        // 检查文件名长度
+        allFiles.forEach((file, index) => {
+            if (file.name.length > 50) {
+                console.warn(`Long filename detected at index ${index}:`, file.name);
+            }
         });
 
-        initFocus(fileListContainer);
+        console.log('fetchFileList:', { allFilesLength: allFiles.length, root, pathName });
+
+        // 更新 UI
+        document.getElementById('removeRoot').style.display = canRemove ? 'inline' : 'none';
+        document.getElementById('renameRoot').style.display = canRemove ? 'inline' : 'none';
+        document.getElementById('playlistGen').style.display = playlistFlag === 0 ? 'none' : 'inline';
+        document.getElementById('playlistGen').textContent = playlistFlag === 1 ? '▶️' : '生成播放列表';
+        document.getElementById('root').innerHTML = pathName;
+
+        // 查找 size 以 ▶️ 开头的 item，并设置焦点索引
+        let focusIndex = 0;
+        allFiles.forEach((file, index) => {
+            if (file.size && typeof file.size === 'string' && file.size.startsWith('▶️')) {
+                focusIndex = index;
+                console.log(`Found item with size starting with ▶️ at index ${index}:`, file.name);
+            }
+        });
+        lastFocusedIndex = focusIndex;
+
+        // 动态更新 itemHeight
+        updateItemHeight();
+
+        // 初始化虚拟列表，并传递焦点索引
+        renderVirtualList(false, focusIndex);
     } catch (error) {
         console.error('获取文件列表失败:', error);
         Swal.fire('错误', '无法获取文件列表，请稍后重试', 'error');
@@ -185,8 +319,8 @@ async function fetchFileList(op, dir) {
     }
 }
 
-function enterDir(filename) {
-    fetchFileList('enter', filename);
+function enterDir(path) {
+    fetchFileList('enter', path);
 }
 
 function isPlayerFullscreen() {
@@ -274,12 +408,12 @@ function changeVideoSrc(file) {
     setVideoSrc(root + '/' + file);
 }
 
-function openFile(filename) {
+function openFile(path) {
     isSwitchingPage = true;
     document.getElementById('playingVideo').textContent = '';
     fileListContainer.style.display = 'none';
     videoContainer.style.display = 'block';
-    changeVideoSrc(filename);
+    changeVideoSrc(path); // 直接使用完整路径
     initFocus(videoContainer);
     setTimeout(() => {
         isSwitchingPage = false;
@@ -752,18 +886,24 @@ function confirmRenameRoot() {
     });
 }
 
+// 初始化焦点
 function initFocus(container = document) {
     const setFocus = () => {
         const focusableElements = getFocusableElements(container);
         let firstItem = null;
 
-        if (container === videoContainer) {
+        if (container === fileListContainer) {
+            // 优先选择 controls 中的第一个按钮
+            firstItem = focusableElements.find(el => el.closest('.controls')) ||
+                focusableElements.find(el => el.classList.contains('current-path')) ||
+                focusableElements.find(el => el.classList.contains('file-item')) ||
+                focusableElements[0];
+        } else if (container === videoContainer) {
             firstItem = videoContainer.querySelector('.vjs-play-control') ||
                 videoContainer.querySelector('.vjs-progress-control') ||
                 videoContainer.querySelector('.vjs-volume-control') ||
                 videoContainer.querySelector('.vjs-fullscreen-control') ||
                 focusableElements[0];
-            console.log('Focusable elements in videoContainer:', focusableElements.map(el => el.outerHTML));
         } else {
             firstItem = focusableElements[0];
         }
@@ -771,9 +911,11 @@ function initFocus(container = document) {
         if (firstItem && firstItem !== document.activeElement) {
             firstItem.focus();
             currentFocus = firstItem;
-            console.log('Focus initialized on:', firstItem.outerHTML, 'isVideoPlaying:', isVideoPlaying);
+            if (firstItem.classList.contains('file-item')) {
+                lastFocusedIndex = parseInt(firstItem.dataset.index, 10) || 0;
+            }
+            ensureVisible(firstItem);
         } else if (!firstItem) {
-            console.warn('No focusable elements found in container:', container, 'isVideoPlaying:', isVideoPlaying);
             document.body.focus();
             currentFocus = document.body;
         }
@@ -786,6 +928,7 @@ function initFocus(container = document) {
     }
 }
 
+// 获取可聚焦元素
 function getFocusableElements(container = document) {
     const elements = Array.from(
         container.querySelectorAll(
@@ -794,24 +937,45 @@ function getFocusableElements(container = document) {
         )
     ).filter((el) => {
         const isVisible = el.offsetParent !== null && !el.disabled;
-        if (!isVisible && (el.classList.contains('vjs-play-control') || el.classList.contains('vjs-fullscreen-control'))) {
-            console.warn('Control not visible:', el.outerHTML);
-        }
         return isVisible;
     });
-    console.log('Focusable elements:', elements.map(el => el.outerHTML));
+
+    // 返回所有可聚焦元素，保持 DOM 顺序
     return elements;
 }
 
-function ensureVisible(element) {
-    const container = element.closest('.file-list, #playlist, .dialog');
-    if (container) {
-        const rect = element.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        if (rect.top < containerRect.top) {
-            container.scrollTop -= containerRect.top - rect.top;
-        } else if (rect.bottom > containerRect.bottom) {
-            container.scrollTop += rect.bottom - containerRect.bottom;
+// 确保焦点在列表项上移动时滚动
+function ensureVisible(element, direction = null) {
+    if (element.classList.contains('file-item')) {
+        const container = element.closest('.virtual-list-container');
+        if (container && container.classList.contains('virtual-list-container')) {
+            const index = parseInt(element.dataset.index, 10);
+            if (isNaN(index)) return;
+
+            const scrollTop = virtualListContainer.scrollTop;
+            const containerHeight = virtualListContainer.clientHeight;
+            const itemTop = index * itemHeight;
+            const itemBottom = itemTop + itemHeight;
+
+            console.log('EnsureVisible:', {
+                index,
+                direction,
+                scrollTop,
+                containerHeight,
+                itemTop,
+                itemBottom,
+                visibleItemsCount
+            });
+
+            if (itemTop < scrollTop) {
+                // 目标在上方，滚动到顶部对齐
+                virtualListContainer.scrollTop = itemTop;
+                console.log('Scrolling to top:', itemTop);
+            } else if (itemBottom > scrollTop + containerHeight) {
+                // 目标在下方，滚动到底部对齐
+                virtualListContainer.scrollTop = itemBottom - containerHeight;
+                console.log('Scrolling to bottom:', itemBottom - containerHeight);
+            }
         }
     }
 }
@@ -886,15 +1050,6 @@ document.addEventListener('keydown', function (event) {
         return;
     }
 
-    console.log('按键详情:', {
-        key: event.key,
-        code: event.code,
-        keyCode: event.keyCode,
-        which: event.which,
-        currentFocus: currentFocus?.outerHTML || 'null',
-        isFullscreen: isPlayerFullscreen()
-    });
-
     const dialogs = document.querySelectorAll(
         '#smbDialog, #renameRootDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog'
     );
@@ -949,88 +1104,177 @@ document.addEventListener('keydown', function (event) {
             action = 'escape';
             break;
         default:
-            console.log('未绑定的按键:', key, keyCode);
             return;
     }
 
     event.preventDefault();
 
+    console.log('Keydown:', {
+        action,
+        currentIndex,
+        itemIndex: currentFocus?.dataset?.index,
+        scrollTop: virtualListContainer.scrollTop,
+        focusableElementsLength: focusableElements.length
+    });
+
     if (isPlayerFullscreen()) {
         switch (action) {
             case 'right':
                 player.currentTime(player.currentTime() + 10);
-                console.log('Full screen: Seek forward 10s');
                 break;
             case 'left':
                 player.currentTime(player.currentTime() - 10);
-                console.log('Full screen: Seek backward 10s');
                 break;
             case 'up':
                 player.volume(Math.min(player.volume() + 0.1, 1));
-                console.log('Full screen: Volume up', player.volume());
                 break;
             case 'down':
                 player.volume(Math.max(player.volume() - 0.1, 0));
-                console.log('Full screen: Volume down', player.volume());
                 break;
             case 'enter':
-                if (player.paused()) {
-                    player.play();
-                    console.log('Full screen: Play');
-                } else {
-                    player.pause();
-                    console.log('Full screen: Pause');
-                }
+                if (player.paused()) player.play();
+                else player.pause();
                 break;
             case 'escape':
                 player.exitFullscreen();
                 initFocus(videoContainer);
-                console.log('Full screen: Exit fullscreen');
                 break;
         }
     } else {
         switch (action) {
             case 'up':
-                if (currentIndex > 0) {
-                    currentFocus = focusableElements[currentIndex - 1];
-                    currentFocus.focus();
-                    ensureVisible(currentFocus);
-                    console.log('Focus moved up to:', currentFocus.outerHTML);
+                if (container === fileListContainer) {
+                    if (currentFocus.classList.contains('file-item') && currentFocus.dataset.index !== undefined) {
+                        const itemIndex = parseInt(currentFocus.dataset.index, 10);
+                        if (itemIndex > 0) {
+                            const prevIndex = itemIndex - 1;
+                            const startIndex = Math.floor(virtualListContainer.scrollTop / itemHeight);
+                            if (prevIndex < startIndex) {
+                                virtualListContainer.scrollTop = prevIndex * itemHeight;
+                                renderVirtualList(false, prevIndex);
+                            } else {
+                                const prevItem = fileList.querySelector(`.file-item[data-index="${prevIndex}"]`);
+                                if (prevItem) {
+                                    prevItem.focus();
+                                    currentFocus = prevItem;
+                                    lastFocusedIndex = prevIndex;
+                                    ensureVisible(prevItem, 'up');
+                                }
+                            }
+                        } else {
+                            // 移到列表前一个元素（例如 .. 或 .current-path）
+                            const prevElement = focusableElements[currentIndex - 1];
+                            if (prevElement) {
+                                prevElement.focus();
+                                currentFocus = prevElement;
+                                if (prevElement.classList.contains('file-item')) {
+                                    lastFocusedIndex = parseInt(prevElement.dataset.index, 10) || 0;
+                                } else {
+                                    lastFocusedIndex = 0;
+                                }
+                            }
+                        }
+                    } else if (currentIndex > 0) {
+                        const prevElement = focusableElements[currentIndex - 1];
+                        prevElement.focus();
+                        currentFocus = prevElement;
+                        if (prevElement.classList.contains('file-item') && prevElement.dataset.index !== undefined) {
+                            lastFocusedIndex = parseInt(prevElement.dataset.index, 10);
+                            ensureVisible(prevElement, 'up');
+                        } else {
+                            lastFocusedIndex = 0;
+                        }
+                    }
+                } else {
+                    if (currentIndex > 0) {
+                        currentFocus = focusableElements[currentIndex - 1];
+                        currentFocus.focus();
+                    }
                 }
                 break;
             case 'down':
-                if (currentIndex < focusableElements.length - 1) {
-                    currentFocus = focusableElements[currentIndex + 1];
-                    currentFocus.focus();
-                    ensureVisible(currentFocus);
-                    console.log('Focus moved down to:', currentFocus.outerHTML);
+                if (container === fileListContainer) {
+                    if (currentFocus.classList.contains('file-item') && currentFocus.dataset.index !== undefined) {
+                        const itemIndex = parseInt(currentFocus.dataset.index, 10);
+                        if (itemIndex < allFiles.length - 1) {
+                            const nextIndex = itemIndex + 1;
+                            const startIndex = Math.floor(virtualListContainer.scrollTop / itemHeight);
+                            const endIndex = Math.min(startIndex + visibleItemsCount, allFiles.length);
+                            console.log('Down:', { itemIndex, nextIndex, startIndex, endIndex });
+                            if (nextIndex >= endIndex) {
+                                const newScrollTop = Math.min(nextIndex * itemHeight, (allFiles.length - visibleItemsCount) * itemHeight);
+                                virtualListContainer.scrollTop = newScrollTop;
+                                renderVirtualList(false, nextIndex);
+                            } else {
+                                const nextItem = fileList.querySelector(`.file-item[data-index="${nextIndex}"]`);
+                                if (nextItem) {
+                                    nextItem.focus();
+                                    currentFocus = nextItem;
+                                    lastFocusedIndex = nextIndex;
+                                    ensureVisible(nextItem, 'down');
+                                } else {
+                                    // 强制渲染并聚焦
+                                    const newScrollTop = Math.min(nextIndex * itemHeight, (allFiles.length - visibleItemsCount) * itemHeight);
+                                    virtualListContainer.scrollTop = newScrollTop;
+                                    renderVirtualList(false, nextIndex);
+                                }
+                            }
+                        } else {
+                            console.log('Reached end of file list, no further navigation');
+                        }
+                    } else if (currentIndex < focusableElements.length - 1) {
+                        const nextElement = focusableElements[currentIndex + 1];
+                        nextElement.focus();
+                        currentFocus = nextElement;
+                        if (nextElement.classList.contains('file-item') && nextElement.dataset.index !== undefined) {
+                            lastFocusedIndex = parseInt(nextElement.dataset.index, 10);
+                            ensureVisible(nextElement, 'down');
+                        } else {
+                            lastFocusedIndex = 0;
+                        }
+                    }
+                } else {
+                    if (currentIndex < focusableElements.length - 1) {
+                        currentFocus = focusableElements[currentIndex + 1];
+                        currentFocus.focus();
+                    }
                 }
                 break;
             case 'left':
-                if (videoContainer.style.display === 'block') {
+                if (container === fileListContainer && currentFocus.classList.contains('file-item')) {
+                    const prevElement = focusableElements.find((el, idx) => idx < currentIndex && !el.classList.contains('file-item'));
+                    if (prevElement) {
+                        prevElement.focus();
+                        currentFocus = prevElement;
+                        lastFocusedIndex = 0;
+                    }
+                } else if (videoContainer.style.display === 'block') {
                     player.currentTime(player.currentTime() - 10);
-                    console.log('Non-fullscreen: Seek backward 10s');
                 } else if (isDialogOpen) {
-                    const buttons = getFocusableElements(container).filter((el) => el.tagName === 'BUTTON');
+                    const buttons = focusableElements.filter((el) => el.tagName === 'BUTTON');
                     const currentButtonIndex = buttons.indexOf(currentFocus);
                     if (currentButtonIndex > 0) {
                         currentFocus = buttons[currentButtonIndex - 1];
                         currentFocus.focus();
-                        console.log('Focus moved left to:', currentFocus.outerHTML);
                     }
                 }
                 break;
             case 'right':
-                if (videoContainer.style.display === 'block') {
+                if (container === fileListContainer && currentFocus.classList.contains('file-item')) {
+                    const nextElement = focusableElements.find((el, idx) => idx > currentIndex && !el.classList.contains('file-item'));
+                    if (nextElement) {
+                        nextElement.focus();
+                        currentFocus = nextElement;
+                        lastFocusedIndex = 0;
+                    }
+                } else if (videoContainer.style.display === 'block') {
                     player.currentTime(player.currentTime() + 10);
-                    console.log('Non-fullscreen: Seek forward 10s');
                 } else if (isDialogOpen) {
-                    const buttons = getFocusableElements(container).filter((el) => el.tagName === 'BUTTON');
+                    const buttons = focusableElements.filter((el) => el.tagName === 'BUTTON');
                     const currentButtonIndex = buttons.indexOf(currentFocus);
                     if (currentButtonIndex < buttons.length - 1) {
                         currentFocus = buttons[currentButtonIndex + 1];
                         currentFocus.focus();
-                        console.log('Focus moved right to:', currentFocus.outerHTML);
                     }
                 }
                 break;
@@ -1042,40 +1286,26 @@ document.addEventListener('keydown', function (event) {
                         currentFocus.closest('.vjs-volume-control') ||
                         currentFocus.closest('.vjs-fullscreen-control')
                     );
-
                     if (isVideoControl) {
                         if (currentFocus.classList.contains('vjs-play-control')) {
                             debouncedPlayPause(event);
                         } else if (currentFocus.classList.contains('vjs-mute-control')) {
                             debouncedMuteToggle(event);
                         } else if (currentFocus.classList.contains('vjs-fullscreen-control')) {
-                            if (isPlayerFullscreen()) {
-                                player.exitFullscreen();
-                                console.log('Enter triggered exit fullscreen');
-                            } else {
-                                player.requestFullscreen();
-                                console.log('Enter triggered request fullscreen');
-                            }
+                            if (isPlayerFullscreen()) player.exitFullscreen();
+                            else player.requestFullscreen();
                         } else {
                             currentFocus.click();
-                            console.log('Enter triggered click on:', currentFocus.outerHTML);
                         }
-                        return; // 阻止后续 click 操作
+                        return;
                     } else if (currentFocus) {
                         currentFocus.click();
-                        console.log('Enter triggered click on:', currentFocus.outerHTML);
                     } else {
-                        if (player.paused()) {
-                            player.play();
-                            console.log('Enter triggered play (no focus)');
-                        } else {
-                            player.pause();
-                            console.log('Enter triggered pause (no focus)');
-                        }
+                        if (player.paused()) player.play();
+                        else player.pause();
                     }
                 } else if (currentFocus) {
                     currentFocus.click();
-                    console.log('Enter triggered click on:', currentFocus.outerHTML);
                 }
                 break;
             case 'escape':
@@ -1084,24 +1314,15 @@ document.addEventListener('keydown', function (event) {
                         (dialog) => dialog.style.display === 'block' || dialog.style.display === 'flex'
                     );
                     const cancelButton = openDialog.querySelector('button[onclick*="close"]');
-                    if (cancelButton) {
-                        cancelButton.click();
-                        console.log('Escape closed dialog');
-                    }
+                    if (cancelButton) cancelButton.click();
                 } else if (videoContainer.style.display === 'block') {
                     isSwitchingPage = true;
                     videoBack();
-                    console.log('Escape triggered videoBack');
-                    setTimeout(() => {
-                        isSwitchingPage = false;
-                    }, 1000);
+                    setTimeout(() => { isSwitchingPage = false; }, 1000);
                 } else if (fileListContainer.style.display === 'block') {
                     isSwitchingPage = true;
                     fetchFileList('leave');
-                    console.log('Escape triggered fetchFileList(leave)');
-                    setTimeout(() => {
-                        isSwitchingPage = false;
-                    }, 1000);
+                    setTimeout(() => { isSwitchingPage = false; }, 1000);
                 }
                 break;
         }
@@ -1130,7 +1351,8 @@ const observer = new MutationObserver(() => {
         console.log('MutationObserver ignored during video playback');
         return;
     }
-    if (fileListContainer.style.display === 'block') {
+    // 仅在 fileListContainer 显示且焦点不在 file-item 上时初始化焦点
+    if (fileListContainer.style.display === 'block' && (!currentFocus || !currentFocus.classList.contains('file-item'))) {
         console.log('Initializing focus for fileListContainer');
         initFocus(fileListContainer);
     } else if (videoContainer.style.display === 'block') {

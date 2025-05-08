@@ -27,7 +27,11 @@
     </div>
     <span class="current-path bordered" id="root" tabindex="0" onclick="fetchFileList('leave')"></span>
     <span class="file-item" tabindex="0" onclick="fetchFileList('leave')">..</span>
-    <ul class="file-list" id="fileList"></ul>
+    <div class="virtual-list-container" id="virtual-list-container">
+        <div class="virtual-list-scroller" id="virtual-list-scroller">
+            <ul class="file-list" id="fileList"></ul>
+        </div>
+    </div>
 </div>
 
 <div id="loadingOverlay" class="loading-overlay">

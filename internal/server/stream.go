@@ -55,13 +55,8 @@ type SVideoRequest struct {
 	VideoURL string `json:"video_url"`
 }
 
-type SVideoResponse struct {
-	VideoID string `json:"video_id"`
-	LastTm  int    `json:"last_tm"`
-}
-
 func (s *Server) handleSVideoID(c *gin.Context) {
-	videoID, err := s.handleSVideoIDInner(c)
+	videoID, lastTm, endingTm, err := s.handleSVideoIDInner(c)
 	if err != nil {
 		c.String(http.StatusInternalServerError, err.Error())
 
@@ -69,12 +64,13 @@ func (s *Server) handleSVideoID(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, SVideoResponse{
-		VideoID: videoID,
-		LastTm:  s.getVideoTm(videoID),
+		VideoID:      videoID,
+		LastTm:       lastTm,
+		SkipEndingTm: endingTm,
 	})
 }
 
-func (s *Server) handleSVideoIDInner(c *gin.Context) (videoID string, err error) {
+func (s *Server) handleSVideoIDInner(c *gin.Context) (videoID string, lastTm, endingTm int, err error) {
 	var req SVideoRequest
 
 	err = c.ShouldBindJSON(&req)
@@ -93,8 +89,12 @@ func (s *Server) handleSVideoIDInner(c *gin.Context) (videoID string, err error)
 		return
 	}
 
+	var opening, ending int
+
 	if playlistFs, ok := rFs.(playlistx.PlaylistFS); ok {
 		_ = playlistFs.SetCurItem(subDir)
+
+		opening, ending = s.getPlaylistOpeningEndingTm(fsID)
 
 		err = s.roots.Change(func(o *TopRoots) (n *TopRoots, err error) {
 			n = o
@@ -117,6 +117,13 @@ func (s *Server) handleSVideoIDInner(c *gin.Context) (videoID string, err error)
 	videoID = uuid.NewString() + filepath.Ext(req.VideoURL)
 
 	s.dCache.Set(s.videoIDKey(videoID), req.VideoURL, time.Hour*2)
+
+	lastTm = s.getVideoTm(videoID)
+	if lastTm == 0 {
+		lastTm = opening
+	}
+
+	endingTm = ending
 
 	return
 }

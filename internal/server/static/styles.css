@@ -159,7 +159,7 @@
 
 /* 对话框通用样式 */
 .dialog {
-    z-index: 2000 !important;
+    z-index: 3000 !important; /* 高于loadingOverlay (1000) 和 Swal (9999) */
     display: none;
     position: fixed;
     top: 50%;
@@ -169,6 +169,59 @@
     padding: 20px;
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.swal2-container {
+    z-index: 2000 !important; /* 低于.dialog */
+}
+/* 统一对话框按钮样式 */
+.dialog button {
+    padding: 10px 20px;
+    margin: 0 5px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    color: white;
+    outline: none;
+    transition: background 0.2s ease;
+}
+
+/* 对话框按钮的具体样式 */
+.dialog button:nth-child(1) {
+    background: #007BFF; /* 测试或第一个按钮 */
+}
+.dialog button:nth-child(2) {
+    background: #28A745; /* 确认按钮 */
+}
+.dialog button:nth-child(3) {
+    background: #DC3545; /* 取消按钮 */
+}
+
+/* 焦点样式 */
+.dialog button:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px #007BFF;
+    background-color: #b3e5fc;
+    color: #1a1a1a;
+}
+
+#sourceSelectionDialog {
+    width: 300px;
+    text-align: center;
+}
+
+#sourceSelectionDialog h3 {
+    margin-top: 0;
+    text-align: center;
+    font-size: 18px;
+    color: #333;
+}
+
+#sourceSelectionDialog div[style*="text-align: center;"] {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
 }
 
 #smbDialog, #directoryDialog, #renameRootDialog {
@@ -332,4 +385,87 @@
     .file-item:focus, .controls button:focus, input:focus, .current-path:focus, #playlist li:focus {
         box-shadow: 0 0 0 4px #007BFF;
     }
+}
+
+/* 设置片头片尾对话框 */
+#openingEndingDialog {
+    width: 300px;
+}
+
+#openingEndingDialog h3 {
+    margin-top: 0;
+    text-align: center;
+    font-size: 18px;
+    color: #333;
+}
+
+#openingEndingDialog label {
+    display: block;
+    font-size: 14px;
+    color: #555;
+    margin-bottom: 8px;
+}
+
+#openingEndingDialog input {
+    width: 90%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    outline: none;
+    color: #1a1a1a;
+}
+
+#openingEndingDialog input:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px #007BFF;
+    background-color: #b3e5fc;
+}
+
+#openingEndingDialog div {
+    margin-bottom: 20px;
+}
+
+#openingEndingDialog div[style*="text-align: center;"] {
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+#openingEndingDialog button {
+    padding: 10px 20px;
+    margin-right: 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+#openingEndingDialog button:nth-child(1) {
+    background: #28A745; /* 确认按钮 */
+    color: white;
+}
+
+#openingEndingDialog button:nth-child(2) {
+    background: #DC3545; /* 取消按钮 */
+    color: white;
+}
+
+/* 确保新按钮样式与现有按钮一致 */
+#setOpeningEnding {
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    background-color: #007BFF;
+    color: white;
+    border-radius: 5px;
+    cursor: pointer;
+    outline: none;
+    margin-bottom: 10px;
+}
+
+#setOpeningEnding:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px #007BFF;
+    background-color: #b3e5fc;
+    color: #1a1a1a;
 }

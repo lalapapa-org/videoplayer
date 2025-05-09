@@ -139,3 +139,50 @@ func (s *Server) isPlaylistExists(path string) (playlistID string, exists bool) 
 
 	return
 }
+
+func (s *Server) handlePlaylistOpeningEndingPOST(c *gin.Context) {
+	err := s.handlePlaylistOpeningEndingPOSTInner(c)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+func (s *Server) handlePlaylistOpeningEndingPOSTInner(c *gin.Context) (err error) {
+	var req PlaylistOpeningEndingPOSTRequest
+
+	err = c.ShouldBindJSON(&req)
+	if err != nil {
+		return
+	}
+
+	err = s.setPlaylistOpeningEndingTm(req.Path, req.OpeningTm, req.EndingTm)
+	if err != nil {
+		return
+	}
+
+	return
+}
+
+func (s *Server) handlePlaylistOpeningEndingGET(c *gin.Context) {
+	opening, ending, err := s.handlePlaylistOpeningEndingGETInner(c)
+	if err != nil {
+		c.String(http.StatusInternalServerError, err.Error())
+
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"opening": opening,
+		"ending":  ending,
+	})
+}
+
+func (s *Server) handlePlaylistOpeningEndingGETInner(c *gin.Context) (opening, ending int, err error) {
+	opening, ending = s.getPlaylistOpeningEndingTm(c.Query("path"))
+
+	return
+}

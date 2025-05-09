@@ -192,6 +192,7 @@ TryTop:
 		if f, ok := rFs.(playlistx.PlaylistFS); ok {
 			curDirname = "<span>" + curDirname + "</span><br />"
 			curDirname += "<span style=\"font-size: 12px; color: yellow\">" + f.GetFriendlyPath() + "</span>"
+			playlistFlag = 3
 		} else {
 			if videoNumbers >= 2 {
 				playlistFlag = 2

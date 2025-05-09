@@ -38,8 +38,9 @@ type Server struct {
 
 	dCache *cache.Cache
 
-	roots        *storagex.MemWithFile[*TopRoots, storagex.Serial, storagex.Lock]
-	lastVideoTms *storagex.MemWithFile[map[string]LastVideoTmItem, storagex.Serial, storagex.Lock]
+	roots                    *storagex.MemWithFile[*TopRoots, storagex.Serial, storagex.Lock]
+	lastVideoTms             *storagex.MemWithFile[map[string]LastVideoTmItem, storagex.Serial, storagex.Lock]
+	playlistOpeningEndingTms *storagex.MemWithFile[map[string]PlaylistOpeningEndingItem, storagex.Serial, storagex.Lock]
 }
 
 func (s *Server) BeforeLoad() {
@@ -88,6 +89,11 @@ type LastVideoTmItem struct {
 	UpdateAt time.Time `json:"ua,omitempty"`
 }
 
+type PlaylistOpeningEndingItem struct {
+	OpeningTm int `json:"o"`
+	EndingTm  int `json:"e"`
+}
+
 func NewServer(cfg *config.Config) *Server {
 	_ = pathx.MustDirExists(cfg.DataRoot)
 	_ = pathx.MustDirExists(cfg.CacheRoot)
@@ -99,6 +105,10 @@ func NewServer(cfg *config.Config) *Server {
 			make(map[string]LastVideoTmItem), &storagex.JSONSerial{
 				MarshalIndent: true,
 			}, &sync.RWMutex{}, filepath.Join(cfg.DataRoot, "last_video_tms.json"), nil, nil, time.Second*5),
+		playlistOpeningEndingTms: storagex.NewMemWithFileEx[map[string]PlaylistOpeningEndingItem, storagex.Serial, storagex.Lock](
+			make(map[string]PlaylistOpeningEndingItem), &storagex.JSONSerial{
+				MarshalIndent: true,
+			}, &sync.RWMutex{}, filepath.Join(cfg.DataRoot, "playlist_opening_ending_tms.json"), nil, nil),
 	}
 
 	s.roots = storagex.NewMemWithFileEx[*TopRoots, storagex.Serial, storagex.Lock](
@@ -167,6 +177,8 @@ func (s *Server) httpRoutine() {
 
 	httpServer.POST("/play-list/preview", s.handlePlayListPreview)
 	httpServer.POST("/play-list/save", s.handlePlayListSave)
+	httpServer.POST("/play-list/opening-ending", s.handlePlaylistOpeningEndingPOST)
+	httpServer.GET("/play-list/opening-ending", s.handlePlaylistOpeningEndingGET)
 
 	_ = httpServer.Run(s.cfg.Listen)
 }

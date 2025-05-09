@@ -24,8 +24,9 @@
         <button tabindex="0" id="playlistGen" onclick="playlistGen()">生成播放列表</button>
         <button tabindex="0" id="removeRoot" onclick="removeRoot()">移除存储</button>
         <button tabindex="0" id="renameRoot" onclick="showRenameRootDialog()">重命名存储</button>
+        <button tabindex="0" id="setOpeningEnding" onclick="showOpeningEndingDialog()" style="display: none;">设置片头片尾</button>
     </div>
-    <span class="current-path bordered" id="root" tabindex="0" onclick="fetchFileList('leave')"></span>
+    <span class="current-path bordered" id="root"></span>
     <span class="file-item" tabindex="0" onclick="fetchFileList('leave')">..</span>
     <div class="virtual-list-container" id="virtual-list-container">
         <div class="virtual-list-scroller" id="virtual-list-scroller">
@@ -107,12 +108,29 @@
     </div>
 </div>
 
+<div id="openingEndingDialog" class="dialog">
+    <h3>设置片头片尾</h3>
+    <div>
+        <label>片头时间（秒）:</label>
+        <input type="number" id="openingTm" tabindex="0" min="0" step="1">
+    </div>
+    <div>
+        <label>片尾时间（秒）:</label>
+        <input type="number" id="endingTm" tabindex="0" min="0" step="1">
+    </div>
+    <div style="text-align: center;">
+        <button tabindex="0" onclick="confirmOpeningEnding()">确定</button>
+        <button tabindex="0" onclick="closeOpeningEndingDialog()">取消</button>
+    </div>
+</div>
+
 <div class="file-list-container hidden" id="video-container">
     <div class="controls">
         <button tabindex="0" onclick="videoBack()">返回</button>
+        <button id="videoPlayerNext" tabindex="0" onclick="videoNext()">下一个</button>
     </div>
     <video id="video" class="video-js vjs-default-skin vjs-16-9" controls preload="auto"></video>
-    <span class="current-path bordered" id="playingVideo" tabindex="0"></span>
+    <span class="current-path bordered" id="playingVideo"></span>
 </div>
 
 <script src="/static/videojs/video.min.js"></script>

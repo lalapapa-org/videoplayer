@@ -6,11 +6,13 @@ let videoID = '';
 let playlistFlag = 0;
 let playlistID = '';
 let videoTm = null;
+let videoEndingTm = null;
 let currentFocus = null;
 let allFiles = [];
 let itemHeight = 50;
 let visibleItemsCount = 10;
 let lastFocusedIndex = 0;
+let maxPlaylistIndex = 0;
 
 const fileListContainer = document.getElementById('file-list-container');
 const videoContainer = document.getElementById('video-container');
@@ -81,6 +83,7 @@ async function setVideoSrc(videoURL) {
         lastVideoTmReport = Math.floor(Date.now() / 1000);
         player.load();
         videoTm = !isNaN(resp['last_tm']) && resp['last_tm'] >= 0 ? resp['last_tm'] : null;
+        videoEndingTm = !isNaN(resp['skip_ending_tm']) && resp['skip_ending_tm'] >= 0 ? resp['skip_ending_tm'] : null;
 
         const playPromise = player.play();
         if (playPromise !== undefined) {
@@ -294,17 +297,27 @@ async function fetchFileList(op, dir) {
         document.getElementById('renameRoot').style.display = canRemove ? 'inline' : 'none';
         document.getElementById('playlistGen').style.display = playlistFlag === 0 ? 'none' : 'inline';
         document.getElementById('playlistGen').textContent = playlistFlag === 1 ? '▶️' : '生成播放列表';
+        document.getElementById('setOpeningEnding').style.display = playlistFlag === 3 ? 'inline' : 'none';
         document.getElementById('root').innerHTML = pathName;
 
         // 查找 size 以 ▶️ 开头的 item，并设置焦点索引
         let focusIndex = 0;
+
+        maxPlaylistIndex = -1;
         allFiles.forEach((file, index) => {
+            maxPlaylistIndex = index;
             if (file.size && typeof file.size === 'string' && file.size.startsWith('▶️')) {
                 focusIndex = index;
                 console.log(`Found item with size starting with ▶️ at index ${index}:`, file.name);
             }
         });
         lastFocusedIndex = focusIndex;
+
+        if (maxPlaylistIndex !== -1 && focusIndex < maxPlaylistIndex) {
+            document.getElementById('videoPlayerNext').style.display = 'block';
+        } else {
+            document.getElementById('videoPlayerNext').style.display = 'none';
+        }
 
         // 动态更新 itemHeight
         updateItemHeight();
@@ -381,6 +394,19 @@ player.on('timeupdate', function () {
         saveVideoTm(player.currentTime());
         lastVideoTmReport = Math.floor(Date.now() / 1000);
     }
+
+    if (videoEndingTm !== null && videoEndingTm > 0) {
+        const currentTime = player.currentTime();
+        const duration = player.duration();
+        if (!isNaN(duration) && duration > 0) {
+            const remainingTime = duration - currentTime;
+            if (remainingTime <= videoEndingTm) {
+                console.log(`Remaining time (${remainingTime}s) <= videoEndingTm (${videoEndingTm}s), triggering videoNext`);
+                videoNext();
+                videoEndingTm = null;
+            }
+        }
+    }
 });
 
 player.on('ended', async function () {
@@ -420,6 +446,10 @@ function openFile(path) {
     }, 1000);
 }
 
+async function videoNext() {
+    await onPlayFinish();
+}
+
 function videoBack() {
     player.pause();
     videoContainer.style.display = 'none';
@@ -437,7 +467,11 @@ function closeSourceSelectionDialog() {
 
 function openSMBDialog() {
     closeSourceSelectionDialog();
-    openDialog('smbDialog');
+    const smbDialog = document.getElementById('smbDialog');
+    smbDialog.style.display = 'block';
+    setTimeout(() => {
+        initFocus(smbDialog);
+    }, 100); // 延迟确保DOM更新
 }
 
 function closeSMBDialog() {
@@ -578,9 +612,14 @@ function closeRenameRootDialog() {
     document.getElementById('renameRootDialog').style.display = 'none';
 }
 
+
 function showDirectoryDialog() {
     closeSourceSelectionDialog();
-    openDialog('directoryDialog');
+    const directoryDialog = document.getElementById('directoryDialog');
+    directoryDialog.style.display = 'block';
+    setTimeout(() => {
+        initFocus(directoryDialog);
+    }, 100); // 延迟确保DOM更新
 }
 
 function closeDirectoryDialog() {
@@ -603,6 +642,107 @@ function confirmDirectoryName() {
     }).then(() => {
         closeDirectoryDialog();
     });
+}
+
+// 打开片头片尾设置对话框
+async function showOpeningEndingDialog() {
+    const dialog = document.getElementById('openingEndingDialog');
+    // 清空输入框
+    document.getElementById('openingTm').value = '';
+    document.getElementById('endingTm').value = '';
+
+    // 显示加载提示
+    showLoading();
+    try {
+        // 调用后端接口获取片头片尾数据
+        const response = await fetch('/play-list/opening-ending?path='+root);
+
+        if (!response.ok) {
+            throw new Error('获取片头片尾数据失败');
+        }
+
+        const data = await response.json();
+        // 填充输入框
+        document.getElementById('openingTm').value = data.opening || 0;
+        document.getElementById('endingTm').value = data.ending || 0;
+    } catch (error) {
+        console.error('获取片头片尾数据失败:', error);
+        Swal.fire({
+            title: '错误',
+            text: '无法获取片头片尾数据，请稍后重试',
+            icon: 'error',
+            customClass: { popup: 'swal-popup-top' },
+        });
+    } finally {
+        hideLoading();
+    }
+
+    // 显示对话框
+    dialog.style.display = 'block';
+    setTimeout(() => {
+        initFocus(dialog);
+    }, 100); // 延迟确保 DOM 更新
+}
+
+// 关闭片头片尾设置对话框
+function closeOpeningEndingDialog() {
+    document.getElementById('openingEndingDialog').style.display = 'none';
+}
+
+// 确认片头片尾设置并调用后端接口
+async function confirmOpeningEnding() {
+    const openingTm = parseInt(document.getElementById('openingTm').value, 10);
+    const endingTm = parseInt(document.getElementById('endingTm').value, 10);
+
+    // 验证输入
+    if (isNaN(openingTm) || isNaN(endingTm) || openingTm < 0 || endingTm < 0) {
+        Swal.fire({
+            title: '错误',
+            text: '请输入有效的片头和片尾时间（非负整数）',
+            icon: 'error',
+            customClass: { popup: 'swal-popup-top' },
+        });
+        return;
+    }
+
+    showLoading();
+    try {
+        const response = await fetch('/play-list/opening-ending', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                path: root,
+                openingTm: openingTm,
+                endingTm: endingTm,
+            }),
+        });
+
+        if (response.status === 200) {
+            Swal.fire({
+                title: '成功',
+                text: '片头片尾设置成功',
+                icon: 'success',
+                customClass: { popup: 'swal-popup-top' },
+            });
+            closeOpeningEndingDialog();
+            // 可选：刷新文件列表以反映可能的更新
+            await fetchFileList();
+        } else {
+            throw new Error('设置片头片尾失败');
+        }
+    } catch (error) {
+        console.error('设置片头片尾失败:', error);
+        Swal.fire({
+            title: '错误',
+            text: '无法设置片头片尾，请稍后重试',
+            icon: 'error',
+            customClass: { popup: 'swal-popup-top' },
+        });
+    } finally {
+        hideLoading();
+    }
 }
 
 async function playlistGen() {
@@ -932,7 +1072,7 @@ function initFocus(container = document) {
 function getFocusableElements(container = document) {
     const elements = Array.from(
         container.querySelectorAll(
-            '.file-item, button, input, .current-path, #playlist li, [tabindex="0"], ' +
+            '.file-item, button, input, #playlist li, [tabindex="0"], ' +
             '.vjs-control.vjs-button, .vjs-progress-control, .vjs-volume-control, .vjs-fullscreen-control'
         )
     ).filter((el) => {
@@ -983,20 +1123,12 @@ function ensureVisible(element, direction = null) {
 function openDialog(dialogId) {
     const dialog = document.getElementById(dialogId);
     dialog.style.display = dialogId === 'playlistDialog' ? 'flex' : 'block';
-    initFocus(dialog);
+    setTimeout(() => {
+        initFocus(dialog);
+    }, 100); // 延迟确保DOM更新
 }
 
 let isSwitchingPage = false; // 新增标志，防止快速切换
-
-function debounce(func, wait) {
-    let timeout;
-    return function (...args) {
-        const context = this;
-        const event = args[0]; // 假设第一个参数是事件对象
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(context, args), wait);
-    };
-}
 
 const debouncedPlayPause = debounce((event) => {
     if (currentFocus.classList.contains('vjs-play-control')) {
@@ -1051,7 +1183,7 @@ document.addEventListener('keydown', function (event) {
     }
 
     const dialogs = document.querySelectorAll(
-        '#smbDialog, #renameRootDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog'
+        '#smbDialog, #renameRootDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog, #openingEndingDialog'
     );
     const isDialogOpen = Array.from(dialogs).some(
         (dialog) => dialog.style.display === 'block' || dialog.style.display === 'flex'
@@ -1374,24 +1506,50 @@ function debounce(func, wait) {
     };
 }
 
-document.addEventListener('click', debounce(() => {
-    if (fileListContainer.style.display === 'block') {
-        initFocus(fileListContainer);
-    } else if (videoContainer.style.display === 'block') {
-        initFocus(videoContainer);
-    }
-}, 200));
 
 document.addEventListener('focusin', (event) => {
     const focusableElements = getFocusableElements(document);
-    if (focusableElements.includes(event.target)) {
-        if (isVideoPlaying && event.target.classList.contains('vjs-control') && event.target !== currentFocus) {
-            console.log('Preventing video.js auto-focus during playback');
-            currentFocus.focus();
-            return;
-        }
-        currentFocus = event.target;
-        console.log('Focus changed to:', currentFocus.outerHTML);
+    if (!focusableElements.includes(event.target)) {
+        console.log('Ignoring focusin on non-focusable element:', event.target.outerHTML);
+        return;
+    }
+
+    const dialogs = document.querySelectorAll(
+        '#smbDialog, #renameRootDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog, #openingEndingDialog'
+    );
+    const isDialogOpen = Array.from(dialogs).some(
+        (dialog) => dialog.style.display === 'block' || dialog.style.display === 'flex'
+    );
+
+    // 检测是否由鼠标点击触发
+    const isMouseClick = event.detail === 0 && event.target === event.currentTarget;
+
+    if (isDialogOpen && !event.target.closest('.dialog') && !isMouseClick) {
+        // 仅在非鼠标点击（如键盘导航或自动焦点）时限制焦点到对话框
+        const openDialog = Array.from(dialogs).find(
+            (dialog) => dialog.style.display === 'block' || dialog.style.display === 'flex'
+        );
+        console.log('Preventing focus outside dialog (non-mouse), restoring to', openDialog.id);
+        setTimeout(() => {
+            initFocus(openDialog);
+        }, 100);
+        return;
+    }
+
+    if (isVideoPlaying && event.target.classList.contains('vjs-control') && event.target !== currentFocus && !isMouseClick) {
+        // 仅在非鼠标点击时阻止视频控件自动焦点
+        console.log('Preventing video.js auto-focus during playback (non-mouse)');
+        currentFocus.focus();
+        return;
+    }
+
+    // 更新 currentFocus，仅在鼠标点击或有效焦点变化时
+    currentFocus = event.target;
+    console.log('Focus changed to:', currentFocus.outerHTML);
+
+    // 如果是 file-item，更新 lastFocusedIndex
+    if (currentFocus.classList.contains('file-item')) {
+        lastFocusedIndex = parseInt(currentFocus.dataset.index, 10) || 0;
     }
 });
 
@@ -1407,16 +1565,15 @@ style.innerHTML = `
 document.head.appendChild(style);
 
 window.addEventListener('beforeunload', (event) => {
-    // 仅在特定条件下（如有未保存更改）显示退出提示
     const isPlayingVideo = videoContainer.style.display === 'block' && !player.paused();
     const hasOpenDialog = document.querySelectorAll(
-        '#smbDialog, #renameRootDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog'
+        '#smbDialog, #renameRootDialog, #directoryDialog, #sourceSelectionDialog, #playlistDialog, #openingEndingDialog'
     ).some(dialog => dialog.style.display === 'block' || dialog.style.display === 'flex');
 
     if (isPlayingVideo || hasOpenDialog) {
         console.log('beforeunload triggered, preventing exit due to active video or dialog');
         event.preventDefault();
-        event.returnValue = ''; // 触发浏览器默认提示（可根据需求禁用）
+        event.returnValue = '';
     } else {
         console.log('beforeunload allowed: no active video or dialog');
     }

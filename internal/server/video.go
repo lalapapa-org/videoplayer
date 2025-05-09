@@ -37,6 +37,25 @@ func (s *Server) getFileFromVideoID(videoID string) (file string, exists bool) {
 	return
 }
 
+func (s *Server) setPlaylistOpeningEndingTm(playlistFsID string, opening, ending int) (err error) {
+	err = s.playlistOpeningEndingTms.Change(func(oldM map[string]PlaylistOpeningEndingItem) (newM map[string]PlaylistOpeningEndingItem, _ error) {
+		newM = oldM
+
+		if len(newM) == 0 {
+			newM = make(map[string]PlaylistOpeningEndingItem)
+		}
+
+		newM[playlistFsID] = PlaylistOpeningEndingItem{
+			OpeningTm: opening,
+			EndingTm:  ending,
+		}
+
+		return
+	})
+
+	return
+}
+
 func (s *Server) setVideoTm(video string, tm int) (err error) {
 	saveID := hashx.MD5(video)
 
@@ -92,6 +111,15 @@ func (s *Server) getVideoTm(videoID string) (tm int) {
 
 	s.lastVideoTms.Read(func(m map[string]LastVideoTmItem) {
 		tm = m[saveID].Tm
+	})
+
+	return
+}
+
+func (s *Server) getPlaylistOpeningEndingTm(playlistFsID string) (opening, ending int) {
+	s.playlistOpeningEndingTms.Read(func(m map[string]PlaylistOpeningEndingItem) {
+		opening = m[playlistFsID].OpeningTm
+		ending = m[playlistFsID].EndingTm
 	})
 
 	return
